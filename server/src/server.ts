@@ -10,6 +10,8 @@ import communityRoutes from './routes/communityRoutes'
 import qrRoutes from './routes/qrRoutes'
 import productRoutes from './routes/productRoutes'
 import kioskRoutes from './routes/kioskRoutes'
+import analyticsRoutes from './routes/analyticsRoutes'
+import dashboardRoutes from './routes/dashboardRoutes'
 
 dotenv.config()
 
@@ -29,6 +31,8 @@ app.use('/api/community', communityRoutes)
 app.use('/api', qrRoutes)
 app.use('/api/products', productRoutes)
 app.use('/api/kiosk', kioskRoutes)
+app.use('/api/analytics', analyticsRoutes)
+app.use('/api/dashboard', dashboardRoutes)
 
 const PORT = process.env.PORT || 5000
 

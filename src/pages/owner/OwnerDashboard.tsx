@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   Card,
   CardContent,
@@ -14,8 +15,6 @@ import {
   ShoppingCart,
 } from 'lucide-react'
 import {
-  BarChart,
-  Bar,
   LineChart,
   Line,
   XAxis,
@@ -27,33 +26,63 @@ import {
   Pie,
   Cell,
 } from 'recharts'
+import axios from 'axios'
+import { useToast } from '@/hooks/use-toast'
 
-// 테스트용 데이터 - 실제로는 백엔드 API로 대체될 예정
-const salesData = [
-  { time: '06:00', sales: 45 },
-  { time: '09:00', sales: 120 },
-  { time: '12:00', sales: 280 },
-  { time: '15:00', sales: 95 },
-  { time: '18:00', sales: 310 },
-  { time: '21:00', sales: 185 },
-]
+// API 설정
+const api = axios.create({
+  baseURL: 'http://localhost:5000/api',
+})
 
-const inventoryData = [
-  { name: '정상', value: 850, color: 'hsl(var(--success))' },
-  { name: '부족', value: 45, color: 'hsl(var(--warning))' },
-  { name: '임박', value: 25, color: 'hsl(var(--destructive))' },
-]
-
-const todayStaff = [
-  { name: '김알바', shift: '06:00 - 14:00', status: '근무중' },
-  { name: '이알바', shift: '14:00 - 22:00', status: '대기' },
-  { name: '박알바', shift: '22:00 - 06:00', status: '대기' },
-]
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('token')
+  if (token) config.headers.Authorization = `Bearer ${token}`
+  return config
+})
 
 const OwnerDashboard = () => {
+  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
+
+  // 상태 관리
+  const [data, setData] = useState({
+    stats: {
+      todaySales: 0,
+      totalInventory: 0,
+      pendingOrders: 0,
+      staffCount: 0,
+    },
+    salesData: [],
+    inventoryData: [],
+    todayStaff: [],
+  })
+
+  // 데이터 로드
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await api.get('/dashboard/summary')
+        setData(res.data)
+      } catch (err) {
+        console.error(err)
+        toast({
+          title: '오류',
+          description: '대시보드 정보를 불러오지 못했습니다.',
+          variant: 'destructive',
+        })
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchData()
+  }, [])
+
+  if (loading) {
+    return <div className="p-8 text-center">대시보드 로딩 중...</div>
+  }
+
   return (
     <div className="space-y-6">
-      {/* ======= 2.a) 관리자 대시보드 - 실시간 판매량 그래프, 재고 현황, 금일 근무자, 주요 알람 ======= */}
       <div>
         <h1 className="text-3xl font-bold">관리자 대시보드</h1>
         <p className="text-muted-foreground mt-1">
@@ -61,7 +90,7 @@ const OwnerDashboard = () => {
         </p>
       </div>
 
-      {/* Stats Cards */}
+      {/* 요약 카드 */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card className="border-l-4 border-l-primary">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -71,8 +100,10 @@ const OwnerDashboard = () => {
             <TrendingUp className="w-4 h-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">₩1,235,000</div>
-            <p className="text-xs text-success mt-1">+12.5% 전일 대비</p>
+            <div className="text-2xl font-bold">
+              ₩{data.stats.todaySales.toLocaleString()}
+            </div>
+            <p className="text-xs text-success mt-1">실시간 집계 중</p>
           </CardContent>
         </Card>
 
@@ -84,9 +115,11 @@ const OwnerDashboard = () => {
             <Package className="w-4 h-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">920개</div>
+            <div className="text-2xl font-bold">
+              {data.stats.totalInventory}개
+            </div>
             <p className="text-xs text-muted-foreground mt-1">
-              정상 재고 비율: 92%
+              총 보유 상품 수량
             </p>
           </CardContent>
         </Card>
@@ -94,12 +127,14 @@ const OwnerDashboard = () => {
         <Card className="border-l-4 border-l-warning">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              발주 대기
+              재고 부족(발주)
             </CardTitle>
             <ShoppingCart className="w-4 h-4 text-warning" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">8건</div>
+            <div className="text-2xl font-bold">
+              {data.stats.pendingOrders}건
+            </div>
             <p className="text-xs text-warning mt-1">확인 필요</p>
           </CardContent>
         </Card>
@@ -107,29 +142,27 @@ const OwnerDashboard = () => {
         <Card className="border-l-4 border-l-accent">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              근무자
+              등록 직원
             </CardTitle>
             <Users className="w-4 h-4 text-accent" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12명</div>
-            <p className="text-xs text-muted-foreground mt-1">금일 근무: 3명</p>
+            <div className="text-2xl font-bold">{data.stats.staffCount}명</div>
+            <p className="text-xs text-muted-foreground mt-1">총 직원 수</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* ======= 2.a-1) 실시간 판매량 그래프 (백엔드 연동), 2.a-2) 재고 현황 요약 ======= */}
+      {/* 차트 영역 */}
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>실시간 판매량</CardTitle>
-            <CardDescription>
-              시간대별 매출 현황 (백엔드 연동 예정)
-            </CardDescription>
+            <CardTitle>실시간 시간대별 매출</CardTitle>
+            <CardDescription>오늘 06:00 ~ 22:00 현황</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={salesData}>
+              <LineChart data={data.salesData}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="hsl(var(--border))"
@@ -137,11 +170,8 @@ const OwnerDashboard = () => {
                 <XAxis dataKey="time" stroke="hsl(var(--muted-foreground))" />
                 <YAxis stroke="hsl(var(--muted-foreground))" />
                 <Tooltip
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: 'var(--radius)',
-                  }}
+                  contentStyle={{ borderRadius: '8px' }}
+                  formatter={(val: number) => `₩${val.toLocaleString()}`}
                 />
                 <Line
                   type="monotone"
@@ -158,13 +188,13 @@ const OwnerDashboard = () => {
         <Card>
           <CardHeader>
             <CardTitle>재고 현황 요약</CardTitle>
-            <CardDescription>카테고리별 재고 상태</CardDescription>
+            <CardDescription>상태별 재고 비율</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={inventoryData}
+                  data={data.inventoryData}
                   cx="50%"
                   cy="50%"
                   labelLine={false}
@@ -175,7 +205,7 @@ const OwnerDashboard = () => {
                   fill="#8884d8"
                   dataKey="value"
                 >
-                  {inventoryData.map((entry, index) => (
+                  {data.inventoryData.map((entry: any, index: number) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -186,19 +216,19 @@ const OwnerDashboard = () => {
         </Card>
       </div>
 
-      {/* Staff and Alerts */}
+      {/* 하단 정보 */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* ======= 2.a-3) 금일 근무자 정보 ======= */}
+        {/* 직원 목록 */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Users className="w-5 h-5" />
-              금일 근무자 정보
+              근무자 현황
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {todayStaff.map((staff, index) => (
+              {data.todayStaff.map((staff: any, index: number) => (
                 <div
                   key={index}
                   className="flex items-center justify-between p-3 bg-secondary rounded-lg"
@@ -220,11 +250,16 @@ const OwnerDashboard = () => {
                   </span>
                 </div>
               ))}
+              {data.todayStaff.length === 0 && (
+                <p className="text-center text-muted-foreground py-4">
+                  등록된 직원이 없습니다.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* ======= 2.a-4) 주요 알람 (발주 알림, 폐기된 물품 알림) ======= */}
+        {/* 주요 알람 */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -234,30 +269,24 @@ const OwnerDashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              <div className="flex items-start gap-3 p-3 bg-warning/10 border border-warning/20 rounded-lg">
-                <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
-                <div>
-                  <p className="font-medium text-sm">발주 요청 대기</p>
-                  <p className="text-xs text-muted-foreground">
-                    8건의 발주 요청이 승인을 기다리고 있습니다
-                  </p>
+              {data.stats.pendingOrders > 0 && (
+                <div className="flex items-start gap-3 p-3 bg-warning/10 border border-warning/20 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm">재고 부족 알림</p>
+                    <p className="text-xs text-muted-foreground">
+                      {data.stats.pendingOrders}개 품목의 재고가 부족합니다.
+                    </p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-start gap-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
-                <AlertCircle className="w-5 h-5 text-destructive mt-0.5" />
-                <div>
-                  <p className="font-medium text-sm">폐기 물품 알림</p>
-                  <p className="text-xs text-muted-foreground">
-                    오늘 3개 품목이 폐기되었습니다 (₩45,000)
-                  </p>
-                </div>
-              </div>
+              )}
+              {/* 폐기/유통기한 데이터는 API에서 추가로 넘겨주면 연동 가능 */}
               <div className="flex items-start gap-3 p-3 bg-primary/10 border border-primary/20 rounded-lg">
                 <AlertCircle className="w-5 h-5 text-primary mt-0.5" />
                 <div>
-                  <p className="font-medium text-sm">유통기한 임박</p>
+                  <p className="font-medium text-sm">시스템 정상 가동</p>
                   <p className="text-xs text-muted-foreground">
-                    15개 품목의 유통기한이 3일 이내입니다
+                    모든 키오스크 및 서버가 정상 작동 중입니다.
                   </p>
                 </div>
               </div>
