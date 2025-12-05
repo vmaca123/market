@@ -10,9 +10,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Store, Lock, User } from 'lucide-react'
+import { Store, ScanBarcode } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import api from '@/lib/api'
+import axios from 'axios'
+
+const api = axios.create({
+  baseURL: 'http://localhost:5000/api', // 백엔드 서버 주소
+})
 
 interface LoginResponse {
   token: string
@@ -48,7 +52,6 @@ const Login = () => {
       const role = res.data.user.role
       const name = res.data.user.username
 
-      // 🔥 저장 키 정확히 통일하기
       localStorage.setItem('token', token)
       localStorage.setItem('username', name)
       localStorage.setItem('role', role)
@@ -58,18 +61,22 @@ const Login = () => {
         description: `${name}님 환영합니다.`,
       })
 
-      // 🔥 role 기반 라우팅
       if (role === 'owner') {
         navigate('/owner/dashboard')
       } else {
         navigate('/staff/dashboard')
       }
     } catch (err: any) {
+      // 에러 처리 강화
+      const errorMessage =
+        err?.response?.data?.message ||
+        '아이디 또는 비밀번호가 올바르지 않습니다.'
+
+      console.error('Login Error:', err)
+
       toast({
         title: '로그인 실패',
-        description:
-          err?.response?.data?.message ||
-          '아이디 또는 비밀번호가 올바르지 않습니다.',
+        description: errorMessage,
         variant: 'destructive',
       })
     }
@@ -131,6 +138,29 @@ const Login = () => {
                 {isLoading ? '로그인 중...' : '로그인'}
               </Button>
             </form>
+
+            {/* 구분선 및 키오스크 이동 버튼 */}
+            <div className="mt-6">
+              <div className="relative mb-4">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    또는
+                  </span>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full h-11 border-primary text-primary hover:bg-primary/5 hover:text-primary"
+                onClick={() => navigate('/kiosk')}
+              >
+                <ScanBarcode className="w-4 h-4 mr-2" />
+                키오스크(셀프 계산대) 모드
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>
