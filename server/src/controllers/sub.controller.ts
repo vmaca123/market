@@ -115,17 +115,23 @@ export const finalApprove = async (req: Request, res: Response) => {
       return res.status(400).json({ message: '대타 지원자가 필요합니다.' })
     }
 
-    // 기존 스케줄 수정
+    // 대타 사용자 정보 조회
+    const subUser = await User.findById(request.substitute)
+    if (!subUser) return res.status(404).json({ message: '대타 사용자 없음' })
+
+    // 스케줄 담당자 ID & 이름 변경 (근무표 반영 핵심!)
     await Schedule.findByIdAndUpdate(request.scheduleId, {
-      staff: request.substitute,
+      staff: subUser._id,
+      staffName: subUser.name,
     })
 
-    // 요청 상태 완료
+    // 요청 상태 완료 처리
     request.status = 'approved_final'
     await request.save()
 
-    return res.json({ message: '대타 최종 승인 및 스케줄 교체 완료' })
-  } catch {
+    return res.json({ message: '대타 최종 승인 및 근무표 반영 완료' })
+  } catch (err) {
+    console.error(err)
     return res.status(500).json({ message: 'error' })
   }
 }
@@ -160,7 +166,7 @@ export const getSubList = async (req: Request, res: Response) => {
     const list = await SubRequest.find({ status: { $ne: 'cancelled' } })
       .populate('scheduleId') // 스케줄 정보(날짜, 시간 등) 필요
       .sort({ createdAt: -1 })
-    
+
     return res.json(list)
   } catch (err) {
     console.error(err)
@@ -183,7 +189,9 @@ export const updateSubRequest = async (req: UserRequest, res: Response) => {
     }
 
     if (request.status !== 'requested') {
-      return res.status(400).json({ message: '이미 진행 중인 요청은 수정할 수 없습니다.' })
+      return res
+        .status(400)
+        .json({ message: '이미 진행 중인 요청은 수정할 수 없습니다.' })
     }
 
     request.reason = reason
@@ -210,7 +218,9 @@ export const cancelSubRequest = async (req: UserRequest, res: Response) => {
     }
 
     if (request.status === 'approved_final') {
-      return res.status(400).json({ message: '이미 완료된 요청은 취소할 수 없습니다.' })
+      return res
+        .status(400)
+        .json({ message: '이미 완료된 요청은 취소할 수 없습니다.' })
     }
 
     // 실제로 삭제하거나 status를 cancelled로 변경

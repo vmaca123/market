@@ -1,5 +1,6 @@
+// src/routes/subRoutes.ts
 import { Router } from 'express'
-import { auth } from '../middleware/auth'
+import { auth, ownerOnly } from '../middleware/auth'
 import {
   requestSub,
   approveRecruit,
@@ -26,15 +27,15 @@ router.put('/:id', auth, updateSubRequest)
 router.delete('/:id', auth, cancelSubRequest)
 
 // 관리자 → 대타 모집 허가
-router.patch('/owner/approve/:id', approveRecruit)
+router.patch('/owner/approve/:id', auth, ownerOnly, approveRecruit)
 
 // 직원 → 대타 수락
-router.patch('/accept/:id', acceptBySub)
+router.patch('/accept/:id', auth, acceptBySub)
 
 // 관리자 → 최종 승인 (스케줄 교체)
-router.patch('/owner/final/:id', finalApprove)
+router.patch('/owner/final/:id', auth, ownerOnly, finalApprove)
 
 // 관리자 → 목록 조회 (Pending / Approved)
-router.get('/owner', getSubListForOwner)
+router.get('/owner', auth, ownerOnly, getSubListForOwner)
 
 export default router
