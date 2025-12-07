@@ -14,6 +14,7 @@ import analyticsRoutes from './routes/analyticsRoutes'
 import dashboardRoutes from './routes/dashboardRoutes'
 import scheduleRoutes from './routes/scheduleRoutes'
 import subRoutes from './routes/subRoutes'
+import handoverRoutes from './routes/handoverRoutes'
 dotenv.config()
 
 const app = express()
@@ -35,6 +36,7 @@ app.use('/api/analytics', analyticsRoutes)
 app.use('/api/dashboard', dashboardRoutes)
 app.use('/api/schedule', scheduleRoutes)
 app.use('/api/sub', subRoutes)
+app.use('/api/handovers', handoverRoutes)
 app.use('/api', qrRoutes)
 
 const PORT = process.env.PORT || 5000

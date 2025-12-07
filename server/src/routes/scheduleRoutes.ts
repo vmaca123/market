@@ -70,8 +70,8 @@ router.get('/week', auth, ownerOnly, async (_req, res) => {
 
     const result = schedules.map((s: any) => ({
       ...s,
-      staffId: s.staff._id.toString(),
-      staffName: s.staff.name,
+      staffId: s.staff?._id?.toString() ?? 'unknown',
+      staffName: s.staff?.name ?? '삭제된 사용자',
       status: getStatus(s.date),
       hours: calcHours(s.startTime, s.endTime),
     }))
@@ -88,12 +88,9 @@ router.get('/my', auth, async (req: UserRequest, res) => {
     const staffId = req.user?.userId
     if (!staffId) return res.status(401).json({ message: '로그인 필요' })
 
-    const start = dayjs().tz().isoWeekday(1).format('YYYY-MM-DD')
-    const end = dayjs().tz().isoWeekday(7).format('YYYY-MM-DD')
-
+    // 모든 스케줄 조회 (날짜 제한 해제)
     const schedules = await Schedule.find({
       staff: staffId,
-      date: { $gte: start, $lte: end },
     }).lean()
 
     const result = schedules.map((s: any) => ({

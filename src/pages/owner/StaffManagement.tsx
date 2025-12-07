@@ -55,13 +55,15 @@ type SubStatus =
 
 interface SubRequestItem {
   _id: string
-  scheduleId: string
+  scheduleId: {
+    _id: string
+    date: string
+    startTime: string
+    endTime: string
+  }
   requesterName: string
   substituteName?: string
   status: SubStatus
-  date: string
-  startTime: string
-  endTime: string
 }
 
 // 시간 계산
@@ -440,7 +442,7 @@ const StaffManagement = () => {
                     >
                       <div>
                         <p>
-                          {r.date.split('T')[0]} / {r.startTime}~{r.endTime}
+                          {r.scheduleId?.date?.split('T')[0]} / {r.scheduleId?.startTime}~{r.scheduleId?.endTime}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           요청자: {r.requesterName}
@@ -490,7 +492,7 @@ const StaffManagement = () => {
                     >
                       <div>
                         <p>
-                          {r.date.split('T')[0]} / {r.startTime}~{r.endTime}
+                          {r.scheduleId?.date?.split('T')[0]} / {r.scheduleId?.startTime}~{r.scheduleId?.endTime}
                         </p>
                         <p className="text-xs text-muted-foreground">
                           요청자: {r.requesterName}

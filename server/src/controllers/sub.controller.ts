@@ -144,9 +144,82 @@ export const getSubListForOwner = async (req: Request, res: Response) => {
       query = { status: 'approved_final' }
     }
 
-    const list = await SubRequest.find(query).sort({ createdAt: -1 })
+    const list = await SubRequest.find(query)
+      .populate('scheduleId')
+      .sort({ createdAt: -1 })
     return res.json(list)
   } catch {
+    return res.status(500).json({ message: 'error' })
+  }
+}
+
+// 직원 → 전체 대타 요청 목록 조회
+export const getSubList = async (req: Request, res: Response) => {
+  try {
+    // 취소된 것 제외하고 모든 요청 조회 (혹은 필요한 상태만)
+    const list = await SubRequest.find({ status: { $ne: 'cancelled' } })
+      .populate('scheduleId') // 스케줄 정보(날짜, 시간 등) 필요
+      .sort({ createdAt: -1 })
+    
+    return res.json(list)
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'error' })
+  }
+}
+
+// 직원 → 대타 요청 수정
+export const updateSubRequest = async (req: UserRequest, res: Response) => {
+  try {
+    const { id } = req.params
+    const { reason } = req.body
+    const userId = req.user?.userId
+
+    const request = await SubRequest.findById(id)
+    if (!request) return res.status(404).json({ message: '요청 없음' })
+
+    if (request.requester.toString() !== userId) {
+      return res.status(403).json({ message: '권한이 없습니다.' })
+    }
+
+    if (request.status !== 'requested') {
+      return res.status(400).json({ message: '이미 진행 중인 요청은 수정할 수 없습니다.' })
+    }
+
+    request.reason = reason
+    await request.save()
+
+    return res.json({ message: '수정 완료' })
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ message: 'error' })
+  }
+}
+
+// 직원 → 대타 요청 취소
+export const cancelSubRequest = async (req: UserRequest, res: Response) => {
+  try {
+    const { id } = req.params
+    const userId = req.user?.userId
+
+    const request = await SubRequest.findById(id)
+    if (!request) return res.status(404).json({ message: '요청 없음' })
+
+    if (request.requester.toString() !== userId) {
+      return res.status(403).json({ message: '권한이 없습니다.' })
+    }
+
+    if (request.status === 'approved_final') {
+      return res.status(400).json({ message: '이미 완료된 요청은 취소할 수 없습니다.' })
+    }
+
+    // 실제로 삭제하거나 status를 cancelled로 변경
+    // 여기서는 삭제로 처리
+    await SubRequest.findByIdAndDelete(id)
+
+    return res.json({ message: '삭제 완료' })
+  } catch (err) {
+    console.error(err)
     return res.status(500).json({ message: 'error' })
   }
 }

@@ -6,6 +6,7 @@ export interface ISubRequest extends Document {
   substitute: Types.ObjectId | null
   requesterName: string
   substituteName: string
+  reason: string
   status:
     | 'requested'
     | 'approved_by_owner'
@@ -38,6 +39,10 @@ const subRequestSchema = new Schema<ISubRequest>(
     substituteName: {
       type: String,
       default: '',
+    },
+    reason: {
+      type: String,
+      required: true,
     },
     status: {
       type: String,

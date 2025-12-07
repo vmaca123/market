@@ -1,8 +1,17 @@
 import express from 'express'
 import Order from '../models/Order'
 import Product from '../models/Product'
-import Staff from '../models/Staff'
+import User from '../models/User'
+import Schedule from '../models/Schedule'
+import Handover from '../models/Handover'
+import Announcement from '../models/Announcement'
 import { authMiddleware } from '../middleware/auth'
+import dayjs from 'dayjs'
+import utc from 'dayjs/plugin/utc'
+import timezone from 'dayjs/plugin/timezone'
+
+dayjs.extend(utc)
+dayjs.extend(timezone)
 
 const router = express.Router()
 
@@ -54,24 +63,64 @@ router.get('/summary', authMiddleware, async (req, res) => {
       { name: '임박', value: expiring, color: 'hsl(var(--destructive))' },
     ]
 
-    // 3. 근무자 목록 (간단히 전체 목록 표시, 추후 스케줄 연동 필요)
-    const staffList = await Staff.find({}).select('name status')
-    const todayStaff = staffList.map((s) => ({
-      name: s.name,
-      shift: '09:00 - 18:00', // 임시 고정값 (스케줄 모델 연동 시 변경)
-      status: s.status === 'active' ? '근무중' : '대기',
-    }))
+    // 3. 근무자 현황 (오늘 스케줄 기준)
+    const staffCount = await User.countDocuments({ role: 'staff' })
+    
+    const todayStr = dayjs().tz('Asia/Seoul').format('YYYY-MM-DD')
+    const nowTime = dayjs().tz('Asia/Seoul').format('HH:mm')
+
+    const schedules = await Schedule.find({ date: todayStr }).populate('staff', 'name')
+    
+    const todayStaff = schedules.map((s: any) => {
+        let status = '대기'
+        // HH:mm 문자열 비교 (24시간제라 가능)
+        if (nowTime >= s.startTime && nowTime <= s.endTime) {
+            status = '근무중'
+        } else if (nowTime > s.endTime) {
+            status = '퇴근'
+        }
+
+        return {
+            name: s.staff?.name || '삭제된 직원',
+            shift: `${s.startTime} - ${s.endTime}`,
+            status: status
+        }
+    })
+
+    // 근무 시작 시간 순 정렬
+    todayStaff.sort((a, b) => a.shift.localeCompare(b.shift))
+
+    // 4. 중요 알림 (중요 인수인계 & 중요 공지사항)
+    // 미확인 중요 인수인계 (최신순 3개)
+    const importantHandovers = await Handover.find({ 
+        isImportant: true, 
+        confirmed: false 
+    })
+    .populate('writer', 'name')
+    .sort({ createdAt: -1 })
+    .limit(3)
+
+    // 중요 공지사항 (최신순 3개)
+    const importantAnnouncements = await Announcement.find({ 
+        important: true 
+    })
+    .sort({ createdAt: -1 })
+    .limit(3)
 
     res.json({
       stats: {
         todaySales: todaySalesTotal,
         totalInventory: totalInventoryCount,
         pendingOrders: low, // 재고 부족 품목 수 = 발주 대기
-        staffCount: staffList.length,
+        staffCount: staffCount,
       },
       salesData,
       inventoryData,
       todayStaff,
+      alerts: {
+        handovers: importantHandovers,
+        announcements: importantAnnouncements
+      }
     })
   } catch (error) {
     console.error(error)

@@ -55,6 +55,7 @@ const Login = () => {
       localStorage.setItem('token', token)
       localStorage.setItem('username', name)
       localStorage.setItem('role', role)
+      localStorage.setItem('userId', res.data.user._id)
 
       toast({
         title: '로그인 성공',

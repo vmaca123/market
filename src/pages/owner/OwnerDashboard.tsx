@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Card,
   CardContent,
@@ -13,6 +14,8 @@ import {
   AlertCircle,
   TrendingUp,
   ShoppingCart,
+  Megaphone,
+  ClipboardList
 } from 'lucide-react'
 import {
   LineChart,
@@ -40,12 +43,29 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+interface DashboardData {
+  stats: {
+    todaySales: number
+    totalInventory: number
+    pendingOrders: number
+    staffCount: number
+  }
+  salesData: any[]
+  inventoryData: any[]
+  todayStaff: any[]
+  alerts: {
+    handovers: any[]
+    announcements: any[]
+  }
+}
+
 const OwnerDashboard = () => {
   const { toast } = useToast()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
 
   // 상태 관리
-  const [data, setData] = useState({
+  const [data, setData] = useState<DashboardData>({
     stats: {
       todaySales: 0,
       totalInventory: 0,
@@ -55,6 +75,10 @@ const OwnerDashboard = () => {
     salesData: [],
     inventoryData: [],
     todayStaff: [],
+    alerts: {
+      handovers: [],
+      announcements: []
+    }
   })
 
   // 데이터 로드
@@ -62,7 +86,7 @@ const OwnerDashboard = () => {
     const fetchData = async () => {
       try {
         const res = await api.get('/dashboard/summary')
-        setData(res.data)
+        setData(res.data as DashboardData)
       } catch (err) {
         console.error(err)
         toast({
@@ -107,7 +131,10 @@ const OwnerDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-success">
+        <Card 
+          className="border-l-4 border-l-success cursor-pointer hover:bg-accent/50 transition-colors"
+          onClick={() => navigate('/owner/inventory')}
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               전체 재고
@@ -124,7 +151,10 @@ const OwnerDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-warning">
+        <Card 
+          className="border-l-4 border-l-warning cursor-pointer hover:bg-accent/50 transition-colors"
+          onClick={() => navigate('/owner/inventory')}
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               재고 부족(발주)
@@ -139,7 +169,10 @@ const OwnerDashboard = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-l-4 border-l-accent">
+        <Card 
+          className="border-l-4 border-l-accent cursor-pointer hover:bg-accent/50 transition-colors"
+          onClick={() => navigate('/owner/staff')}
+        >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               등록 직원
@@ -269,8 +302,12 @@ const OwnerDashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
+              {/* 재고 부족 */}
               {data.stats.pendingOrders > 0 && (
-                <div className="flex items-start gap-3 p-3 bg-warning/10 border border-warning/20 rounded-lg">
+                <div 
+                    className="flex items-start gap-3 p-3 bg-warning/10 border border-warning/20 rounded-lg cursor-pointer hover:bg-warning/20 transition-colors"
+                    onClick={() => navigate('/owner/inventory')}
+                >
                   <AlertCircle className="w-5 h-5 text-warning mt-0.5" />
                   <div>
                     <p className="font-medium text-sm">재고 부족 알림</p>
@@ -280,16 +317,55 @@ const OwnerDashboard = () => {
                   </div>
                 </div>
               )}
-              {/* 폐기/유통기한 데이터는 API에서 추가로 넘겨주면 연동 가능 */}
-              <div className="flex items-start gap-3 p-3 bg-primary/10 border border-primary/20 rounded-lg">
-                <AlertCircle className="w-5 h-5 text-primary mt-0.5" />
-                <div>
-                  <p className="font-medium text-sm">시스템 정상 가동</p>
-                  <p className="text-xs text-muted-foreground">
-                    모든 키오스크 및 서버가 정상 작동 중입니다.
-                  </p>
+
+              {/* 중요 인수인계 */}
+              {data.alerts?.handovers?.map((h: any) => (
+                <div 
+                    key={h._id} 
+                    className="flex items-start gap-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg cursor-pointer hover:bg-destructive/20 transition-colors"
+                    onClick={() => navigate('/staff/handover')}
+                >
+                  <ClipboardList className="w-5 h-5 text-destructive mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm text-destructive">중요 인수인계 (미확인)</p>
+                    <p className="text-xs text-muted-foreground line-clamp-1">
+                      {h.writer?.name}: {h.content}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              ))}
+
+              {/* 중요 공지사항 */}
+              {data.alerts?.announcements?.map((a: any) => (
+                <div 
+                    key={a._id} 
+                    className="flex items-start gap-3 p-3 bg-primary/10 border border-primary/20 rounded-lg cursor-pointer hover:bg-primary/20 transition-colors"
+                    onClick={() => navigate('/owner/announcements')}
+                >
+                  <Megaphone className="w-5 h-5 text-primary mt-0.5" />
+                  <div>
+                    <p className="font-medium text-sm text-primary">중요 공지사항</p>
+                    <p className="text-xs text-muted-foreground line-clamp-1">
+                      {a.title}
+                    </p>
+                  </div>
+                </div>
+              ))}
+
+              {/* 알림 없음 */}
+              {data.stats.pendingOrders === 0 && 
+               (!data.alerts?.handovers || data.alerts.handovers.length === 0) && 
+               (!data.alerts?.announcements || data.alerts.announcements.length === 0) && (
+                <div className="flex items-start gap-3 p-3 bg-secondary/50 border rounded-lg">
+                    <AlertCircle className="w-5 h-5 text-muted-foreground mt-0.5" />
+                    <div>
+                    <p className="font-medium text-sm">시스템 정상 가동</p>
+                    <p className="text-xs text-muted-foreground">
+                        확인할 중요 알림이 없습니다.
+                    </p>
+                    </div>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
