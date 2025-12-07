@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Package, AlertTriangle, ShoppingCart } from 'lucide-react'
+import { Search, Package, AlertTriangle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -74,6 +74,57 @@ type OrderRequest = {
   orderedAt?: string
 }
 
+const isExpired = (date?: string) => {
+  if (!date) return false
+  const target = new Date(date)
+  if (isNaN(target.getTime())) return false
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  return target < todayStart
+}
+
+const ORDER_STORAGE_KEY = 'owner_inventory_order_requests'
+
+const loadSavedOrders = (): OrderRequest[] => {
+  if (typeof window === 'undefined') return []
+  try {
+    const raw = localStorage.getItem(ORDER_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    if (Array.isArray(parsed)) return parsed
+  } catch (e) {
+    console.warn('발주 상태 로드 실패:', e)
+  }
+  return []
+}
+
+const mergeOrderRequests = (
+  lowStockRequests: OrderRequest[],
+  existing: OrderRequest[]
+) => {
+  const merged: OrderRequest[] = []
+  const lowMap = new Map(lowStockRequests.map((r) => [r.id, r]))
+
+  existing.forEach((req) => {
+    const low = lowMap.get(req.id)
+    const keep = req.status !== '대기' || !!low
+    if (!keep) return
+    if (low) lowMap.delete(req.id)
+
+    const base = low ? { ...low, ...req } : { ...req }
+    merged.push({
+      ...base,
+      orderQuantity: req.orderQuantity ?? low?.orderQuantity,
+      orderedAt: req.orderedAt ?? low?.orderedAt,
+      status: req.status ?? low?.status ?? '대기',
+    })
+  })
+
+  lowMap.forEach((req) => merged.push(req))
+
+  return merged
+}
+
 const MOCK_PRODUCTS: Product[] = [
   {
     _id: 'mock_1',
@@ -121,11 +172,27 @@ const InventoryManagement = () => {
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('전체')
+  const [sortMode, setSortMode] = useState<'default' | 'lowStock' | 'expiry'>(
+    'default'
+  )
   const [items, setItems] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
-  const [orderRequests, setOrderRequests] = useState<OrderRequest[]>([])
+  const [orderRequests, setOrderRequests] = useState<OrderRequest[]>(
+    () => loadSavedOrders()
+  )
   const [approveTarget, setApproveTarget] = useState<OrderRequest | null>(null)
   const [orderQuantity, setOrderQuantity] = useState('')
+
+  // [안전장치 3] 날짜 계산 로직 강화 (함수 선언으로 호이스팅)
+  function daysUntil(date?: string) {
+    if (!date) return null
+    const target = new Date(date).getTime()
+    if (isNaN(target)) return null // 날짜 형식이 이상하면 null 반환
+    const today = new Date().setHours(0, 0, 0, 0)
+    const diff = Math.ceil((target - today) / (1000 * 60 * 60 * 24))
+    // 유통기한이 이미 지났으면 음수 대신 0으로 표시
+    return Math.max(diff, 0)
+  }
 
   const fetchInventory = async () => {
     setLoading(true)
@@ -152,18 +219,26 @@ const InventoryManagement = () => {
         return
       }
 
-      const mapped = res.data.map((item: any) => ({
-        _id: item._id,
-        // [안전장치 2] 필드값이 없을 경우 기본값 할당 (Null Check)
-        productName: item.name || '이름 없음',
-        quantity: typeof item.stock === 'number' ? item.stock : 0,
-        category: item.category || '기타',
-        price: typeof item.price === 'number' ? item.price : 0,
-        minStock: typeof item.minStock === 'number' ? item.minStock : 5,
-        expireDate: item.expiryDate || '',
-        // createdAt이 없으면 현재 시간으로 대체 (흰화면 방지 핵심)
-        entryDate: item.createdAt || new Date().toISOString(),
-      }))
+      const mapped = res.data.map((item: any) => {
+        const expired = isExpired(item.expiryDate)
+        return {
+          _id: item._id,
+          // [안전장치 2] 필드값이 없을 경우 기본값 할당 (Null Check)
+          productName: item.name || '이름 없음',
+          quantity:
+            typeof item.stock === 'number'
+              ? expired
+                ? 0
+                : item.stock
+              : 0, // 유통기한 지난 상품은 0으로 표시
+          category: item.category || '기타',
+          price: typeof item.price === 'number' ? item.price : 0,
+          minStock: typeof item.minStock === 'number' ? item.minStock : 5,
+          expireDate: item.expiryDate || '',
+          // createdAt이 없으면 현재 시간으로 대체 (흰화면 방지 핵심)
+          entryDate: item.createdAt || new Date().toISOString(),
+        }
+      })
 
       setItems(mapped)
     } catch (err: any) {
@@ -198,7 +273,7 @@ const InventoryManagement = () => {
   }, [])
 
   const filteredInventory = useMemo(() => {
-    return items.filter((item) => {
+    const filtered = items.filter((item) => {
       const nameMatch = item.productName
         ? item.productName.toLowerCase().includes(searchTerm.toLowerCase())
         : false
@@ -206,23 +281,66 @@ const InventoryManagement = () => {
         selectedCategory === '전체' || item.category === selectedCategory
       return nameMatch && categoryMatch
     })
-  }, [items, searchTerm, selectedCategory])
 
-  // [안전장치 3] 날짜 계산 로직 강화
-  const daysUntil = (date?: string) => {
-    if (!date) return null
-    const target = new Date(date).getTime()
-    if (isNaN(target)) return null // 날짜 형식이 이상하면 null 반환
-    const today = new Date().setHours(0, 0, 0, 0)
-    return Math.ceil((target - today) / (1000 * 60 * 60 * 24))
-  }
+    const sorted = [...filtered]
+    if (sortMode === 'lowStock') {
+      const getStatusRank = (item: Product) => {
+        const expiryDays = daysUntil(item.expireDate)
+        const isLow = item.quantity < (item.minStock ?? 0)
+        const isExpiring =
+          item.quantity > 0 && expiryDays !== null && expiryDays <= 7
+        if (isLow) return 0
+        if (isExpiring) return 1
+        return 2
+      }
+
+      sorted.sort((a, b) => {
+        const rankA = getStatusRank(a)
+        const rankB = getStatusRank(b)
+        if (rankA !== rankB) return rankA - rankB
+
+        // 동등 그룹 내에서는 부족 정도/임박 순으로 정렬
+        if (rankA === 0) {
+          const aDiff = (a.quantity ?? 0) - (a.minStock ?? 0)
+          const bDiff = (b.quantity ?? 0) - (b.minStock ?? 0)
+          return aDiff - bDiff
+        }
+        if (rankA === 1) {
+          const aDays = daysUntil(a.expireDate) ?? Number.MAX_SAFE_INTEGER
+          const bDays = daysUntil(b.expireDate) ?? Number.MAX_SAFE_INTEGER
+          return aDays - bDays
+        }
+        return (a.productName ?? '').localeCompare(b.productName ?? '')
+      })
+    } else if (sortMode === 'expiry') {
+      sorted.sort((a, b) => {
+        const aDays = daysUntil(a.expireDate)
+        const bDays = daysUntil(b.expireDate)
+
+        // 재고 0인 상품은 가장 아래로
+        const rankA = a.quantity <= 0 ? 1 : 0
+        const rankB = b.quantity <= 0 ? 1 : 0
+        if (rankA !== rankB) return rankA - rankB
+
+        if (aDays === null && bDays === null) return 0
+        if (aDays === null) return 1
+        if (bDays === null) return -1
+        if (aDays === bDays) {
+          return (a.productName ?? '').localeCompare(b.productName ?? '')
+        }
+        return aDays - bDays
+      })
+    }
+    return sorted
+  }, [items, searchTerm, selectedCategory])
 
   const lowStockItems = filteredInventory.filter(
     (item) => item.quantity < (item.minStock ?? 0)
   )
   const expiringItems = filteredInventory.filter((item) => {
     const d = daysUntil(item.expireDate)
-    return d !== null && d <= 7
+    // 재고가 0인 품목은 임박 목록/표시에서 제외
+    return item.quantity > 0 && d !== null && d <= 7
   })
 
   // 자동 발주 목록 생성 로직
@@ -255,20 +373,14 @@ const InventoryManagement = () => {
       })
 
     // 기존 상태 유지(승인/거절) 후 새 데이터 병합
-    setOrderRequests((prev) =>
-      next.map((n) => {
-        const existing = prev.find((p) => p.id === n.id)
-        return existing
-          ? {
-              ...n,
-              status: existing.status,
-              orderQuantity: existing.orderQuantity,
-              orderedAt: existing.orderedAt,
-            }
-          : n
-      })
-    )
+    setOrderRequests((prev) => mergeOrderRequests(next, prev))
   }, [items])
+
+  // 승인/거절 상태 로컬 저장
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(ORDER_STORAGE_KEY, JSON.stringify(orderRequests))
+  }, [orderRequests])
 
   const pendingOrders = orderRequests.filter((r) => r.status === '대기')
   const approvedOrders = orderRequests.filter((r) => r.status === '승인')
@@ -297,7 +409,7 @@ const InventoryManagement = () => {
     setOrderQuantity(request.quantity.toString())
   }
 
-  const handleApproveConfirm = () => {
+  const handleApproveConfirm = async () => {
     if (!approveTarget) return
     const qty = Number(orderQuantity)
     if (Number.isNaN(qty) || qty <= 0) {
@@ -309,32 +421,62 @@ const InventoryManagement = () => {
       return
     }
 
-    setOrderRequests((prev) =>
-      prev.map((req) =>
-        req.id === approveTarget.id
-          ? {
-              ...req,
-              status: '승인',
-              orderQuantity: qty,
-              orderedAt: new Date().toISOString(),
-            }
-          : req
+    const applyApprovalState = () => {
+      setOrderRequests((prev) =>
+        prev.map((req) =>
+          req.id === approveTarget.id
+            ? {
+                ...req,
+                status: '승인',
+                orderQuantity: qty,
+                orderedAt: new Date().toISOString(),
+              }
+            : req
+        )
       )
-    )
-    setApproveTarget(null)
-    setOrderQuantity('')
-    toast({
-      title: '발주 승인 완료',
-      description: `${approveTarget.item}을(를) ${qty}개 발주했습니다.`,
-    })
-  }
+      setApproveTarget(null)
+      setOrderQuantity('')
+      toast({
+        title: '발주 승인 완료',
+        description: `${approveTarget.item}을(를) ${qty}개 발주했습니다.`,
+      })
+    }
 
-  const handleAutoRecommend = () => {
-    // 백엔드 AI 추천 로직 연동 예정
-    toast({
-      title: '자동 발주 추천',
-      description: '부족한 재고 기준으로 발주 품목을 추천했습니다.',
-    })
+    const token = localStorage.getItem('token')
+    if (!token) {
+      setItems((prev) =>
+        prev.map((item) =>
+          item._id === approveTarget.id
+            ? { ...item, quantity: item.quantity + qty }
+            : item
+        )
+      )
+      applyApprovalState()
+      return
+    }
+
+    try {
+      await api.patch(`/products/${approveTarget.id}/stock`, {
+        quantity: qty,
+      })
+
+      setItems((prev) =>
+        prev.map((item) =>
+          item._id === approveTarget.id
+            ? { ...item, quantity: item.quantity + qty }
+            : item
+        )
+      )
+      applyApprovalState()
+      await fetchInventory()
+    } catch (err: any) {
+      console.error('발주 승인 처리 실패:', err)
+      toast({
+        title: '승인 실패',
+        description: '재고 업데이트에 실패했습니다. 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+    }
   }
 
   return (
@@ -380,16 +522,27 @@ const InventoryManagement = () => {
                 <SelectItem value="생활용품">생활용품</SelectItem>
               </SelectContent>
             </Select>
+            <Select
+              value={sortMode}
+              onValueChange={(v) =>
+                setSortMode(v as 'default' | 'lowStock' | 'expiry')
+              }
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue placeholder="정렬" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">기본 정렬</SelectItem>
+                <SelectItem value="lowStock">재고 부족 우선</SelectItem>
+                <SelectItem value="expiry">유통기한 임박 우선</SelectItem>
+              </SelectContent>
+            </Select>
             <Button
               variant="outline"
               onClick={fetchInventory}
               disabled={loading}
             >
               {loading ? '불러오는 중...' : '새로고침'}
-            </Button>
-            <Button onClick={handleAutoRecommend}>
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              자동 발주 추천
             </Button>
           </div>
 
@@ -478,12 +631,16 @@ const InventoryManagement = () => {
                           </p>
                           <p
                             className={`font-medium ${
-                              expiry !== null && expiry <= 3
+                              expiry !== null && expiry <= 3 && item.quantity > 0
                                 ? 'text-destructive'
                                 : ''
                             }`}
                           >
-                            {expiry === null ? '-' : `D-${expiry}`}
+                            {item.quantity <= 0
+                              ? '-'
+                              : expiry === null
+                                ? '-'
+                                : `D-${expiry}`}
                           </p>
                         </div>
                         {item.quantity < (item.minStock ?? 0) && (
@@ -494,7 +651,7 @@ const InventoryManagement = () => {
                             부족
                           </Badge>
                         )}
-                        {expiry !== null && expiry <= 3 && (
+                        {item.quantity > 0 && expiry !== null && expiry <= 3 && (
                           <Badge
                             variant="outline"
                             className="border-destructive text-destructive"

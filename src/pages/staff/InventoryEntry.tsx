@@ -17,15 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Package, AlertTriangle, ShoppingCart } from 'lucide-react'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+import { Search, Package, AlertTriangle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import axios from 'axios'
 
@@ -55,15 +47,13 @@ type Product = {
   price?: number
 }
 
-type OrderRequest = {
-  id: string
-  item: string
-  quantity: number
-  requestedBy: string
-  date: string
-  status: '대기' | '승인' | '거절'
-  orderQuantity?: number
-  orderedAt?: string
+const isExpired = (date?: string) => {
+  if (!date) return false
+  const target = new Date(date)
+  if (isNaN(target.getTime())) return false
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  return target < todayStart
 }
 
 // 데모용 모의 데이터
@@ -96,9 +86,6 @@ const InventoryManagement = () => {
   const [selectedCategory, setSelectedCategory] = useState('전체')
   const [items, setItems] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
-  const [orderRequests, setOrderRequests] = useState<OrderRequest[]>([])
-  const [approveTarget, setApproveTarget] = useState<OrderRequest | null>(null)
-  const [orderQuantity, setOrderQuantity] = useState('')
 
   const fetchInventory = async () => {
     setLoading(true)
@@ -123,16 +110,19 @@ const InventoryManagement = () => {
       }
 
       // 데이터 매핑 및 기본값 처리
-      const mapped = res.data.map((item: any) => ({
-        _id: item._id,
-        productName: item.name || item.productName || '',
-        quantity: Number(item.stock) || 0,
-        category: item.category || '기타',
-        price: Number(item.price) || 0,
-        minStock: Number(item.minStock) || 5,
-        expireDate: item.expiryDate || '',
-        entryDate: item.createdAt || new Date().toISOString(),
-      }))
+      const mapped = res.data.map((item: any) => {
+        const expired = isExpired(item.expiryDate)
+        return {
+          _id: item._id,
+          productName: item.name || item.productName || '',
+          quantity: expired ? 0 : Number(item.stock) || 0, // 유통기한 지난 상품은 0으로 표시
+          category: item.category || '기타',
+          price: Number(item.price) || 0,
+          minStock: Number(item.minStock) || 5,
+          expireDate: item.expiryDate || '',
+          entryDate: item.createdAt || new Date().toISOString(),
+        }
+      })
 
       const validItems = mapped.filter((item: Product) => {
         const name = item.productName.trim()
@@ -195,125 +185,16 @@ const InventoryManagement = () => {
     return d !== null && d <= 7
   })
 
-  // 자동 발주 제안 생성
-  useEffect(() => {
-    const next = items
-      .filter((item) => item.quantity <= 2)
-      .map((item) => {
-        let dateStr = '-'
-        try {
-          const d = item.scannedAt || item.entryDate
-          if (d) {
-            const dateObj = new Date(d)
-            if (!isNaN(dateObj.getTime()))
-              dateStr = dateObj.toLocaleDateString()
-          }
-        } catch (e) {
-          dateStr = '-'
-        }
-
-        return {
-          id: item._id,
-          item: item.productName,
-          quantity: item.quantity,
-          requestedBy: '시스템 감지',
-          date: dateStr,
-          status: '대기' as const,
-        }
-      })
-
-    setOrderRequests((prev) =>
-      next.map((n) => {
-        const existing = prev.find((p) => p.id === n.id)
-        return existing
-          ? {
-              ...n,
-              status: existing.status,
-              orderQuantity: existing.orderQuantity,
-              orderedAt: existing.orderedAt,
-            }
-          : n
-      })
-    )
-  }, [items])
-
-  const pendingOrders = orderRequests.filter((r) => r.status === '대기')
-  const approvedOrders = orderRequests.filter((r) => r.status === '승인')
-
-  // 발주 승인/거절 처리
-  const handleOrderApproval = (
-    orderId: string,
-    action: 'approve' | 'reject'
-  ) => {
-    setOrderRequests((prev) =>
-      prev.map((req) =>
-        req.id === orderId
-          ? { ...req, status: action === 'approve' ? '승인' : '거절' }
-          : req
-      )
-    )
-    toast({
-      title: action === 'approve' ? '승인 완료' : '거절 완료',
-      description: `발주 요청이 ${
-        action === 'approve' ? '승인' : '거절'
-      }되었습니다.`,
-    })
-  }
-
-  const openApproveDialog = (request: OrderRequest) => {
-    setApproveTarget(request)
-    setOrderQuantity(request.quantity.toString())
-  }
-
-  const handleApproveConfirm = () => {
-    if (!approveTarget) return
-    const qty = Number(orderQuantity)
-    if (Number.isNaN(qty) || qty <= 0) {
-      toast({
-        title: '입력 오류',
-        description: '올바른 수량을 입력하세요.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    setOrderRequests((prev) =>
-      prev.map((req) =>
-        req.id === approveTarget.id
-          ? {
-              ...req,
-              status: '승인',
-              orderQuantity: qty,
-              orderedAt: new Date().toISOString(),
-            }
-          : req
-      )
-    )
-    setApproveTarget(null)
-    setOrderQuantity('')
-    toast({ title: '발주 완료', description: `${qty}개 발주되었습니다.` })
-  }
-
-  const handleAutoRecommend = () => {
-    toast({
-      title: '자동 추천',
-      description: '부족한 재고 기준으로 추천되었습니다.',
-    })
-  }
-
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">재고/발주 관리</h1>
-        <p className="text-muted-foreground mt-1">
-          재고 현황을 확인하고 발주를 관리하세요
-        </p>
+        <h1 className="text-3xl font-bold">재고 관리</h1>
+        <p className="text-muted-foreground mt-1">재고 현황을 확인하세요</p>
       </div>
 
       <Tabs defaultValue="inventory" className="space-y-4">
         <TabsList>
           <TabsTrigger value="inventory">재고 목록</TabsTrigger>
-          <TabsTrigger value="orders">발주 요청</TabsTrigger>
           <TabsTrigger value="expiring">유통기한 임박</TabsTrigger>
         </TabsList>
 
@@ -349,9 +230,6 @@ const InventoryManagement = () => {
               disabled={loading}
             >
               {loading ? '로딩 중...' : '새로고침'}
-            </Button>
-            <Button onClick={handleAutoRecommend}>
-              <ShoppingCart className="w-4 h-4 mr-2" /> 자동 추천
             </Button>
           </div>
 
@@ -468,87 +346,6 @@ const InventoryManagement = () => {
           </Card>
         </TabsContent>
 
-        {/* 발주 요청 탭 */}
-        <TabsContent value="orders" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>발주 요청 목록</CardTitle>
-              <CardDescription>수량 2개 이하 품목 자동 감지</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {pendingOrders.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-center justify-between p-4 border rounded-lg"
-                  >
-                    <h4 className="font-medium">{request.item}</h4>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => openApproveDialog(request)}
-                      >
-                        승인
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() =>
-                          handleOrderApproval(request.id, 'reject')
-                        }
-                      >
-                        거절
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                {pendingOrders.length === 0 && (
-                  <div className="text-center text-muted-foreground py-6">
-                    요청 없음
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>승인 목록</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {approvedOrders.map((request) => (
-                  <div
-                    key={request.id}
-                    className="flex items-center justify-between p-4 border rounded-lg"
-                  >
-                    <div>
-                      <h4 className="font-medium">{request.item}</h4>
-                      <p className="text-xs text-muted-foreground">
-                        주문: {request.orderQuantity ?? 0}개 •{' '}
-                        {request.orderedAt
-                          ? new Date(request.orderedAt).toLocaleDateString()
-                          : '-'}
-                      </p>
-                    </div>
-                    <Badge
-                      variant="outline"
-                      className="border-success text-success"
-                    >
-                      승인됨
-                    </Badge>
-                  </div>
-                ))}
-                {approvedOrders.length === 0 && (
-                  <div className="text-center text-muted-foreground py-6">
-                    승인 내역 없음
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         {/* 유통기한 임박 탭 */}
         <TabsContent value="expiring" className="space-y-4">
           <Card>
@@ -589,32 +386,6 @@ const InventoryManagement = () => {
           </Card>
         </TabsContent>
       </Tabs>
-
-      <Dialog
-        open={!!approveTarget}
-        onOpenChange={(open) => !open && setApproveTarget(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>발주 수량</DialogTitle>
-            <DialogDescription>
-              {approveTarget?.item} 주문 수량을 입력하세요.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            type="number"
-            min={1}
-            value={orderQuantity}
-            onChange={(e) => setOrderQuantity(e.target.value)}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setApproveTarget(null)}>
-              취소
-            </Button>
-            <Button onClick={handleApproveConfirm}>전송</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

@@ -26,26 +26,70 @@ router.post('/checkout', async (req, res) => {
   try {
     const { items, totalAmount, paymentMethod } = req.body
 
-    // 재고 차감 로직
-    for (const item of items) {
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: '구매할 상품이 없습니다.' })
+    }
+
+    // 1) 요청 상품에 대한 재고 검증을 먼저 수행해 부족하면 바로 차단
+    const aggregated: Record<
+      string,
+      { product: any; qty: number; name: string; barcode?: string }
+    > = {}
+
+    for (const raw of items) {
+      const qty = Number(raw.quantity) || 0
+      if (qty <= 0) continue
+
       let product = null
-
-      if (item.productId && mongoose.Types.ObjectId.isValid(item.productId)) {
-        product = await Product.findById(item.productId)
+      if (raw.productId && mongoose.Types.ObjectId.isValid(raw.productId)) {
+        product = await Product.findById(raw.productId)
+      }
+      if (!product && raw.barcode) {
+        product = await Product.findOne({ barcode: raw.barcode })
       }
 
-      if (!product && item.barcode) {
-        product = await Product.findOne({ barcode: item.barcode })
+      if (!product) {
+        return res.status(404).json({
+          message: '상품을 찾을 수 없습니다.',
+          item: raw.name ?? raw.barcode ?? '알 수 없음',
+        })
       }
 
-      if (product) {
-        product.stock -= item.quantity
-        await product.save()
-        console.log(`✅ 재고 차감: ${product.name} (-${item.quantity})`)
+      const key = product._id.toString()
+      if (!aggregated[key]) {
+        aggregated[key] = {
+          product,
+          qty,
+          name: product.name ?? raw.name ?? '상품',
+          barcode: product.barcode ?? raw.barcode,
+        }
       } else {
-        console.log(`⚠️ 재고 차감 실패: ${item.name}`)
+        aggregated[key].qty += qty
       }
     }
+
+    // 재고 부족 여부 확인
+    for (const { product, qty, name, barcode } of Object.values(aggregated)) {
+      if (product.stock < qty) {
+        return res.status(400).json({
+          message: '재고가 부족합니다.',
+          product: name,
+          barcode,
+          available: product.stock,
+          requested: qty,
+        })
+      }
+    }
+
+    // 2) 재고 차감
+    for (const { product, qty } of Object.values(aggregated)) {
+      product.stock = Math.max(0, product.stock - qty)
+      await product.save()
+      console.log(`✅ 재고 차감: ${product.name} (-${qty})`)
+    }
+
+    // 재고 차감 로직
+    // (위에서 선검증 했으므로 여기서는 성공 로그만 남김)
 
     // 주문 기록 저장
     const newOrder = await Order.create({

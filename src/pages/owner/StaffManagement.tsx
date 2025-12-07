@@ -2,6 +2,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -91,8 +92,26 @@ const getSubStatusLabel = (status: SubStatus) => {
   }
 }
 
+const formatDateOnly = (value?: string) => value?.split?.('T')?.[0] ?? '-'
+
 const StaffManagement = () => {
   const { toast } = useToast()
+  const navigate = useNavigate()
+
+  const handleAuthError = (err: any) => {
+    const status = err?.response?.status
+    if (status === 401 || status === 403) {
+      toast({
+        title: '세션 만료',
+        description: '다시 로그인해주세요.',
+        variant: 'destructive',
+      })
+      localStorage.clear()
+      navigate('/')
+      return true
+    }
+    return false
+  }
 
   const [staffList, setStaffList] = useState<Staff[]>([])
   const [weekSchedule, setWeekSchedule] = useState<DaySchedule[]>([])
@@ -116,45 +135,78 @@ const StaffManagement = () => {
 
   // ---------- API ----------
   const fetchStaff = async () => {
-    const res = await api.get<Staff[]>('/staff/list')
-    setStaffList(res.data)
+    try {
+      const res = await api.get<Staff[]>('/staff/list')
+      setStaffList(Array.isArray(res.data) ? res.data : [])
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '근무자 목록 로드 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+      setStaffList([])
+    }
   }
 
   const fetchWeekSchedule = async () => {
-    const res = await api.get<ScheduleItem[]>('/schedule/week')
-    const days = ['일', '월', '화', '수', '목', '금', '토']
+    try {
+      const res = await api.get<ScheduleItem[]>('/schedule/week')
+      const days = ['일', '월', '화', '수', '목', '금', '토']
 
-    // hours 계산
-    const items = res.data.map((s) => ({
-      ...s,
-      hours: calcHours(s.startTime, s.endTime),
-    }))
-
-    const grouped: Record<string, typeof items> = {}
-    items.forEach((s) => {
-      const d = s.date.split('T')[0]
-      if (!grouped[d]) grouped[d] = []
-      grouped[d].push(s)
-    })
-
-    const result: DaySchedule[] = Object.entries(grouped)
-      .sort(([a], [b]) => (a < b ? -1 : 1))
-      .map(([date, shifts]) => ({
-        date,
-        dayLabel: `${days[new Date(date).getDay()]} (${date})`,
-        shifts,
+      const source = Array.isArray(res.data) ? res.data : []
+      // hours 계산
+      const items = source.map((s) => ({
+        ...s,
+        hours: calcHours(s.startTime, s.endTime),
       }))
 
-    setWeekSchedule(result)
+      const grouped: Record<string, typeof items> = {}
+      items.forEach((s) => {
+        const d = s.date?.split?.('T')?.[0] ?? ''
+        if (!d) return
+        if (!grouped[d]) grouped[d] = []
+        grouped[d].push(s)
+      })
+
+      const result: DaySchedule[] = Object.entries(grouped)
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([date, shifts]) => ({
+          date,
+          dayLabel: `${days[new Date(date).getDay()]} (${date})`,
+          shifts,
+        }))
+
+      setWeekSchedule(result)
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '근무표 로드 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+      setWeekSchedule([])
+    }
   }
 
   const fetchSubRequests = async () => {
-    const [pending, approved] = await Promise.all([
-      api.get<SubRequestItem[]>('/sub/owner?mode=pending'),
-      api.get<SubRequestItem[]>('/sub/owner?mode=approved'),
-    ])
-    setPendingSubs(pending.data)
-    setApprovedSubs(approved.data)
+    try {
+      const [pending, approved] = await Promise.all([
+        api.get<SubRequestItem[]>('/sub/owner?mode=pending'),
+        api.get<SubRequestItem[]>('/sub/owner?mode=approved'),
+      ])
+      setPendingSubs(Array.isArray(pending.data) ? pending.data : [])
+      setApprovedSubs(Array.isArray(approved.data) ? approved.data : [])
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '대타 요청 로드 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+      setPendingSubs([])
+      setApprovedSubs([])
+    }
   }
 
   useEffect(() => {
@@ -174,15 +226,24 @@ const StaffManagement = () => {
       return
     }
 
-    await api.post('/schedule/add', {
-      staffId: selectedStaff,
-      date: date.split('T')[0],
-      startTime,
-      endTime,
-    })
+    try {
+      await api.post('/schedule/add', {
+        staffId: selectedStaff,
+        date: date.split('T')[0],
+        startTime,
+        endTime,
+      })
 
-    toast({ title: '스케줄 등록 완료' })
-    fetchWeekSchedule()
+      toast({ title: '스케줄 등록 완료' })
+      fetchWeekSchedule()
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '등록 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+    }
   }
 
   // ---------- 스케줄 수정 ----------
@@ -196,31 +257,58 @@ const StaffManagement = () => {
 
   const handleUpdateSchedule = async () => {
     if (!editTarget) return
-    await api.put(`/schedule/${editTarget._id}`, {
-      date: editDate,
-      startTime: editStartTime,
-      endTime: editEndTime,
-    })
-    toast({ title: '수정 완료' })
-    setIsEditDialogOpen(false)
-    fetchWeekSchedule()
+    try {
+      await api.put(`/schedule/${editTarget._id}`, {
+        date: editDate,
+        startTime: editStartTime,
+        endTime: editEndTime,
+      })
+      toast({ title: '수정 완료' })
+      setIsEditDialogOpen(false)
+      fetchWeekSchedule()
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '수정 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+    }
   }
 
   // ---------- 스케줄 삭제 ----------
   const handleDeleteSchedule = async (shift: ScheduleItem) => {
     if (!confirm('삭제할까요?')) return
-    await api.delete(`/schedule/${shift._id}`)
-    toast({ title: '삭제 완료' })
-    fetchWeekSchedule()
+    try {
+      await api.delete(`/schedule/${shift._id}`)
+      toast({ title: '삭제 완료' })
+      fetchWeekSchedule()
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '삭제 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+    }
   }
 
   // ---------- 근무자 삭제 ----------
   const handleDeleteStaff = async (id: string) => {
     if (!confirm('정말 삭제? 직원과 스케줄도 함께 삭제됩니다.')) return
-    await api.delete(`/staff/${id}`)
-    toast({ title: '근무자 삭제 완료' })
-    fetchStaff()
-    fetchWeekSchedule()
+    try {
+      await api.delete(`/staff/delete/${id}`)
+      toast({ title: '근무자 삭제 완료' })
+      fetchStaff()
+      fetchWeekSchedule()
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '삭제 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+    }
   }
 
   // ---------- 직원 추가 ----------
@@ -229,27 +317,54 @@ const StaffManagement = () => {
       toast({ title: '입력 오류', variant: 'destructive' })
       return
     }
-    await api.post('/staff/add', {
-      name: newStaffName,
-      phone: newStaffPhone,
-    })
-    toast({ title: '직원 추가 완료' })
-    setIsAddDialogOpen(false)
-    fetchStaff()
+    try {
+      await api.post('/staff/add', {
+        name: newStaffName,
+        phone: newStaffPhone,
+      })
+      toast({ title: '직원 추가 완료' })
+      setIsAddDialogOpen(false)
+      fetchStaff()
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '추가 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+    }
   }
 
   // ---------- 대타 승인 ----------
   const handleApproveRecruit = async (id: string) => {
-    await api.patch(`/sub/owner/approve/${id}`)
-    toast({ title: '대타 모집 허가' })
-    fetchSubRequests()
+    try {
+      await api.patch(`/sub/owner/approve/${id}`)
+      toast({ title: '대타 모집 허가' })
+      fetchSubRequests()
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '처리 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+    }
   }
 
   const handleFinalApprove = async (id: string) => {
-    await api.patch(`/sub/owner/final/${id}`)
-    toast({ title: '최종 승인 완료' })
-    fetchSubRequests()
-    fetchWeekSchedule()
+    try {
+      await api.patch(`/sub/owner/final/${id}`)
+      toast({ title: '최종 승인 완료' })
+      fetchSubRequests()
+      fetchWeekSchedule()
+    } catch (err: any) {
+      if (handleAuthError(err)) return
+      toast({
+        title: '처리 실패',
+        description: err?.response?.data?.message ?? '잠시 후 다시 시도해주세요.',
+        variant: 'destructive',
+      })
+    }
   }
 
   // ================= 렌더 ================= //

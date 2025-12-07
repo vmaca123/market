@@ -6,12 +6,15 @@ const router = express.Router()
 
 router.get('/dashboard', authMiddleware, async (req, res) => {
   try {
-    const today = new Date()
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0))
+    const now = new Date()
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const startOfWeek = new Date(
-      today.setDate(today.getDate() - today.getDay())
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - now.getDay()
     ) // 이번 주 일요일부터
-    const startOfYear = new Date(new Date().getFullYear(), 0, 1)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfYear = new Date(now.getFullYear(), 0, 1)
 
     // 1. 시간대별 매출 (오늘 기준)
     const hourlyStats = await Order.aggregate([
@@ -70,7 +73,7 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
       }
     })
 
-    // 4. 인기/비인기 상품 분석
+    // 4. 인기/비인기 상품 분석 (전체 데이터 기준)
     const productStats = await Order.aggregate([
       { $unwind: '$items' },
       {
@@ -99,9 +102,24 @@ router.get('/dashboard', authMiddleware, async (req, res) => {
         revenue: p.revenue,
       }))
 
-    // 5. 요약 통계 (이번 주)
+    // 5. 요약 통계: 이번 주 매출 + 이번 달 판매 수량
     const totalSales = formattedWeekly.reduce((acc, cur) => acc + cur.sales, 0)
-    const totalItems = productStats.reduce((acc, cur) => acc + cur.sales, 0)
+
+    // 이번 달 판매 수량만 집계
+    const monthlyItems = await Order.aggregate([
+      { $match: { createdAt: { $gte: startOfMonth } } },
+      { $unwind: '$items' },
+      {
+        $group: {
+          _id: null,
+          totalQty: { $sum: '$items.quantity' },
+        },
+      },
+    ])
+    const totalItems =
+      monthlyItems.length > 0 && typeof monthlyItems[0].totalQty === 'number'
+        ? monthlyItems[0].totalQty
+        : 0
 
     res.json({
       hourlySales: formattedHourly,

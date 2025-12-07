@@ -20,26 +20,47 @@ router.get('/summary', authMiddleware, async (req, res) => {
     const todayStart = new Date()
     todayStart.setHours(0, 0, 0, 0)
 
-    // 1. 오늘 매출 & 시간대별 차트 데이터
-    const todayOrders = await Order.find({ createdAt: { $gte: todayStart } })
-    const todaySalesTotal = todayOrders.reduce(
-      (acc, cur) => acc + cur.totalAmount,
-      0
-    )
+    // 1. 오늘 매출 & 시간대별 차트 데이터 (분석 페이지와 동일한 로직)
+    const hourlyStats = await Order.aggregate([
+      { $match: { createdAt: { $gte: todayStart } } },
+      {
+        $group: {
+          _id: { $hour: '$createdAt' },
+          sales: { $sum: '$totalAmount' },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ])
 
-    // 시간대별 집계 (06:00 ~ 22:00)
     const salesData = Array.from({ length: 17 }, (_, i) => {
-      const hour = i + 6
-      const salesInHour = todayOrders
-        .filter((o) => new Date(o.createdAt).getHours() === hour)
-        .reduce((acc, cur) => acc + cur.totalAmount, 0)
-      return { time: `${String(hour).padStart(2, '0')}:00`, sales: salesInHour }
+      const hour = i + 6 // 06시부터 22시까지
+      const found = hourlyStats.find((h) => h._id === hour)
+      return {
+        time: `${String(hour).padStart(2, '0')}:00`,
+        sales: found ? found.sales : 0,
+      }
     })
 
-    // 2. 재고 현황 (파이 차트용)
+    const todaySalesTotal = salesData.reduce((acc, cur) => acc + cur.sales, 0)
+
+    // 2. 재고 현황 (파이 차트용) - 인벤토리/발주 페이지와 동일한 부족 기준 사용
     const products = await Product.find({})
+    const defaultMinStock = 5 // 프런트 인벤토리 페이지 기본 minStock과 맞춤
+
+    const normalizeQty = (p: any) => {
+      const qty = typeof p.stock === 'number' ? p.stock : 0
+      // 유통기한 지난 상품은 인벤토리 페이지에서 quantity 0으로 취급
+      if (p.expiryDate) {
+        const expDate = new Date(p.expiryDate)
+        const todayStart = new Date()
+        todayStart.setHours(0, 0, 0, 0)
+        if (!isNaN(expDate.getTime()) && expDate < todayStart) return 0
+      }
+      return qty
+    }
+
     const totalInventoryCount = products.reduce(
-      (acc, cur) => acc + cur.stock,
+      (acc, cur) => acc + normalizeQty(cur),
       0
     )
 
@@ -51,10 +72,45 @@ router.get('/summary', authMiddleware, async (req, res) => {
     const threeDaysLater = new Date()
     threeDaysLater.setDate(now.getDate() + 3)
 
+    const lowStockItems: {
+      id: string
+      name: string
+      stock: number
+      minStock: number
+      category?: string
+    }[] = []
+
     products.forEach((p) => {
-      if (p.expiryDate && new Date(p.expiryDate) <= threeDaysLater) expiring++
-      else if (p.stock <= p.minStock) low++
-      else normal++
+      const qty = normalizeQty(p)
+      const rawMin =
+        typeof (p as any).minStock === 'number'
+          ? (p as any).minStock
+          : defaultMinStock
+      const minStock = rawMin > 0 ? rawMin : defaultMinStock
+
+      const isExpiring =
+        p.expiryDate && new Date(p.expiryDate) <= threeDaysLater
+      const isLow = qty < minStock
+
+      // 대시보드 부족 카운트는 인벤토리 페이지의 부족 알림과 동일하게 "minStock 미만" 기준으로 계산
+      if (isLow) {
+        lowStockItems.push({
+          id: p._id.toString(),
+          name: (p as any).name ?? '이름 없음',
+          stock: qty,
+          minStock,
+          category: (p as any).category,
+        })
+      }
+
+      // 파이 차트 분류는 임박 우선, 그 외 부족/정상 순으로 반영
+      if (isExpiring) {
+        expiring++
+      } else if (isLow) {
+        low++
+      } else {
+        normal++
+      }
     })
 
     const inventoryData = [
