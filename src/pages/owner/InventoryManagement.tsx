@@ -448,15 +448,10 @@ const InventoryManagement = () => {
         quantity: qty,
       })
 
-      setItems((prev) =>
-        prev.map((item) =>
-          item._id === approveTarget.id
-            ? { ...item, quantity: item.quantity + qty }
-            : item
-        )
-      )
-      applyApprovalState()
+      // [수정] 서버에서 최신 데이터를 다시 불러와서 확실하게 동기화
       await fetchInventory()
+      
+      applyApprovalState()
     } catch (err: any) {
       console.error('발주 승인 처리 실패:', err)
       toast({
