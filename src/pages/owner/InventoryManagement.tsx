@@ -108,6 +108,40 @@ const mergeOrderRequests = (
   return merged
 }
 
+// [자동 계산] 상품 종류별 유통기한 자동 계산 로직
+const getAutoExpiryDate = (productName: string, category: string) => {
+  const today = new Date()
+  let addDays = 180 // 기본값 (라면/일반식품 등)
+
+  const name = productName.toLowerCase()
+  const cat = category || '기타'
+
+  if (cat === '식품') {
+    if (
+      name.includes('삼각') ||
+      name.includes('김밥') ||
+      name.includes('도시락') ||
+      name.includes('샌드위치') ||
+      name.includes('버거')
+    ) {
+      addDays = 3 // 신선식품
+    } else if (name.includes('우유') || name.includes('유제품')) {
+      addDays = 10 // 유제품
+    } else if (name.includes('빵') || name.includes('케이크')) {
+      addDays = 7 // 베이커리
+    } else if (name.includes('라면') || name.includes('면')) {
+      addDays = 180 // 라면류
+    }
+  } else if (cat === '음료') {
+    addDays = 180 // 음료
+  } else if (cat === '생활용품') {
+    addDays = 365 * 2 // 생활용품 (2년)
+  }
+
+  const targetDate = new Date(today.setDate(today.getDate() + addDays))
+  return targetDate.toISOString().split('T')[0]
+}
+
 const MOCK_PRODUCTS: Product[] = [
   {
     _id: 'mock_1',
@@ -456,6 +490,23 @@ const InventoryManagement = () => {
     applyApprovalState()
   }
 
+  // [자동 계산] 스캔 대상 설정 시 기본 유통기한 자동 입력
+  useEffect(() => {
+    if (scanTarget) {
+      const product = items.find((i) => i._id === scanTarget.id)
+      if (product) {
+        const autoDate = getAutoExpiryDate(
+          product.productName,
+          product.category || '기타'
+        )
+        setReceiveData((prev) => ({
+          ...prev,
+          expireDate: prev.expireDate || autoDate,
+        }))
+      }
+    }
+  }, [scanTarget, items])
+
   const handleScanReceive = (decodedText: string) => {
     try {
       const parsed = JSON.parse(decodedText)
@@ -463,13 +514,26 @@ const InventoryManagement = () => {
       if (parsed.productId && scanTarget) {
         // 스캔 성공
         setScanning(false)
-        setReceiveData((prev) => ({ 
-          ...prev, 
+
+        // QR에 유통기한이 없으면 자동 계산된 값 사용
+        let finalExpireDate = parsed.expireDate
+        if (!finalExpireDate) {
+          const product = items.find((i) => i._id === parsed.productId)
+          if (product) {
+            finalExpireDate = getAutoExpiryDate(
+              product.productName,
+              product.category || '기타'
+            )
+          }
+        }
+
+        setReceiveData((prev) => ({
+          ...prev,
           quantity: parsed.quantity || scanTarget.orderQuantity || 0,
-          expireDate: parsed.expireDate || '', // QR에서 유통기한 자동 입력
+          expireDate: finalExpireDate || '', // QR에서 유통기한 자동 입력
         }))
-        
-        const msg = parsed.expireDate 
+
+        const msg = finalExpireDate
           ? 'QR 코드 확인 완료. (유통기한 자동 입력됨)'
           : 'QR 코드 확인 완료. 유통기한을 입력해주세요.'
 
