@@ -548,7 +548,7 @@ const InventoryManagement = () => {
       console.error(e)
       let errorMsg = '서버 오류가 발생했습니다.'
       
-      if (axios.isAxiosError(e)) {
+      if ((axios as any).isAxiosError(e)) {
         if (e.response?.status === 404) {
           errorMsg = 'API 경로를 찾을 수 없습니다. 서버를 재시작해주세요.'
         } else if (e.response?.data?.message) {
