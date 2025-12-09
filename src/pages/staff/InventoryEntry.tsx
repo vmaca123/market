@@ -393,20 +393,6 @@ const InventoryManagement = () => {
                     />
                   </div>
                   <div className="grid grid-cols-4 items-center gap-4">
-                    <Label htmlFor="price" className="text-right">
-                      가격
-                    </Label>
-                    <Input
-                      id="price"
-                      type="number"
-                      value={qrData.price}
-                      onChange={(e) =>
-                        setQrData({ ...qrData, price: Number(e.target.value) })
-                      }
-                      className="col-span-3"
-                    />
-                  </div>
-                  <div className="grid grid-cols-4 items-center gap-4">
                     <Label htmlFor="expiry" className="text-right">
                       유통기한
                     </Label>
