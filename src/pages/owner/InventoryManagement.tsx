@@ -31,6 +31,7 @@ import {
 } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
+import axios from 'axios'
 
 type Product = {
   _id: string
@@ -51,15 +52,7 @@ type OrderRequest = {
   requestedBy: string
   date: string
   status: '대기' | '승인' | '거절'
-  /*************  ✨ Windsurf Command ⭐  *************/
-  /**
-   * Fetches inventory data from the backend API.
-   * If the request is successful, the received data is mapped to include default values for category, minStock, and price.
-   * The mapped data is then set to the items state.
-   * If the request fails, a toast error message is displayed.
-   * Finally, the loading state is set to false.
-   */
-  /*******  34d91ae8-c998-4c15-b3f0-01d65f2cf339  *******/ orderQuantity?: number
+  orderQuantity?: number
   orderedAt?: string
   expireDate?: string // QR 생성용 자동 계산된 유통기한
 }
@@ -247,7 +240,7 @@ const InventoryManagement = () => {
       console.warn('API Error (using mock data):', err.message)
 
       let errorMsg = '재고 목록을 불러오지 못했습니다.'
-      if (axios.isAxiosError(err)) {
+      if ((axios as any).isAxiosError(err)) {
         if (err.response?.status === 401) {
           errorMsg = '인증이 만료되었습니다. (테스트용 데이터를 표시합니다)'
         } else if (err.code === 'ERR_NETWORK') {
@@ -822,7 +815,7 @@ const InventoryManagement = () => {
                             // @ts-ignore
                             orderQuantity: request.orderQuantity,
                             expireDate: request.expireDate,
-                          } as Product)
+                          } as unknown as Product)
                         }
                         title="발주 QR 보기 (이메일 첨부)"
                       >
