@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import mongoose from 'mongoose'
 import { authMiddleware } from '../middleware/auth'
 import Product from '../models/Product'
 
@@ -91,6 +92,10 @@ router.patch('/:id', authMiddleware, async (req, res) => {
 // 상품 삭제
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ message: '유효하지 않은 ID입니다.' })
+    }
+
     const product = await Product.findByIdAndDelete(req.params.id)
     if (!product) {
       return res.status(404).json({ message: '상품을 찾을 수 없습니다.' })

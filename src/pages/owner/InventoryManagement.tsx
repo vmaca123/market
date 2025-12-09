@@ -631,6 +631,16 @@ const InventoryManagement = () => {
   const handleDeleteProduct = async (id: string) => {
     if (!confirm('정말 이 상품을 삭제하시겠습니까?')) return
 
+    // [Mock Data 처리]
+    if (id.startsWith('mock_')) {
+      setItems((prev) => prev.filter((item) => item._id !== id))
+      toast({
+        title: '삭제 완료',
+        description: '테스트 상품이 삭제되었습니다.',
+      })
+      return
+    }
+
     try {
       await api.delete(`/products/${id}`)
       toast({
@@ -638,11 +648,23 @@ const InventoryManagement = () => {
         description: '상품이 삭제되었습니다.',
       })
       fetchInventory()
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      let errorMsg = '상품 삭제 중 오류가 발생했습니다.'
+
+      if ((axios as any).isAxiosError(e)) {
+        if (e.response?.status === 404) {
+          errorMsg = '이미 삭제되었거나 존재하지 않는 상품입니다.'
+        } else if (e.response?.status === 400) {
+          errorMsg = '잘못된 요청입니다. (ID 오류)'
+        } else if (e.response?.data?.message) {
+          errorMsg = e.response.data.message
+        }
+      }
+
       toast({
         title: '삭제 실패',
-        description: '상품 삭제 중 오류가 발생했습니다.',
+        description: errorMsg,
         variant: 'destructive',
       })
     }
