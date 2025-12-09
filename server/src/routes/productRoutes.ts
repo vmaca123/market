@@ -58,4 +58,34 @@ router.patch('/:id/stock', authMiddleware, async (req, res) => {
   }
 })
 
+// 상품 정보 수정 (재고, 유통기한 등)
+router.patch('/:id', authMiddleware, async (req, res) => {
+  try {
+    const { quantity, expiryDate } = req.body
+    const updateData: any = {}
+
+    if (quantity !== undefined) {
+      updateData.stock = Number(quantity)
+    }
+    if (expiryDate !== undefined) {
+      updateData.expiryDate = expiryDate
+    }
+
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData },
+      { new: true }
+    )
+
+    if (!product) {
+      return res.status(404).json({ message: '상품을 찾을 수 없습니다.' })
+    }
+
+    res.json(product)
+  } catch (err) {
+    console.error('상품 업데이트 에러:', err)
+    res.status(500).json({ message: '상품 업데이트 실패' })
+  }
+})
+
 export default router
