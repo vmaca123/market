@@ -672,6 +672,53 @@ const InventoryManagement = () => {
     }
   }
 
+  const [editPriceTarget, setEditPriceTarget] = useState<Product | null>(null)
+  const [editPriceValue, setEditPriceValue] = useState('')
+
+  const handleEditPrice = async () => {
+    if (!editPriceTarget) return
+    const newPrice = Number(editPriceValue)
+    if (isNaN(newPrice) || newPrice < 0) {
+      toast({
+        title: '입력 오류',
+        description: '유효한 가격을 입력해주세요.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      // [Mock Data 처리]
+      if (editPriceTarget._id.startsWith('mock_')) {
+        setItems((prev) =>
+          prev.map((item) =>
+            item._id === editPriceTarget._id
+              ? { ...item, price: newPrice }
+              : item
+          )
+        )
+      } else {
+        await api.patch(`/products/${editPriceTarget._id}`, {
+          price: newPrice,
+        })
+        fetchInventory()
+      }
+
+      toast({
+        title: '수정 완료',
+        description: '가격이 수정되었습니다.',
+      })
+      setEditPriceTarget(null)
+    } catch (e) {
+      console.error(e)
+      toast({
+        title: '수정 실패',
+        description: '가격 수정 중 오류가 발생했습니다.',
+        variant: 'destructive',
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* ======= 2.b) 재고/발주 관리 - DB목록, 검색/필터링, 발주요청 알림, 자동추천 및 신청, 유통기한임박 상품 ======= */}
@@ -799,10 +846,20 @@ const InventoryManagement = () => {
                         </div>
                         <div className="flex-1">
                           <h4 className="font-medium">{item.productName}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {item.category} • ₩
-                            {item.price?.toLocaleString?.() ?? '-'}
-                          </p>
+                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <span>{item.category}</span>
+                            <span>•</span>
+                            <button
+                              onClick={() => {
+                                setEditPriceTarget(item)
+                                setEditPriceValue(item.price?.toString() || '0')
+                              }}
+                              className="hover:underline hover:text-primary flex items-center gap-1"
+                              title="가격 수정"
+                            >
+                              ₩{item.price?.toLocaleString?.() ?? '-'}
+                            </button>
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-6">
@@ -1041,6 +1098,41 @@ const InventoryManagement = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* 가격 수정 다이얼로그 */}
+      <Dialog
+        open={!!editPriceTarget}
+        onOpenChange={(open) => !open && setEditPriceTarget(null)}
+      >
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>가격 수정</DialogTitle>
+            <DialogDescription>
+              {editPriceTarget?.productName}의 판매 가격을 수정합니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-price" className="text-right">
+                가격
+              </Label>
+              <Input
+                id="edit-price"
+                type="number"
+                value={editPriceValue}
+                onChange={(e) => setEditPriceValue(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditPriceTarget(null)}>
+              취소
+            </Button>
+            <Button onClick={handleEditPrice}>수정 완료</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={!!approveTarget}

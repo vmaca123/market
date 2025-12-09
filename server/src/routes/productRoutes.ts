@@ -59,10 +59,10 @@ router.patch('/:id/stock', authMiddleware, async (req, res) => {
   }
 })
 
-// 상품 정보 수정 (재고, 유통기한 등)
+// 상품 정보 수정 (재고, 유통기한, 가격 등)
 router.patch('/:id', authMiddleware, async (req, res) => {
   try {
-    const { quantity, expiryDate } = req.body
+    const { quantity, expiryDate, price } = req.body
     const updateData: any = {}
 
     if (quantity !== undefined) {
@@ -70,6 +70,9 @@ router.patch('/:id', authMiddleware, async (req, res) => {
     }
     if (expiryDate !== undefined) {
       updateData.expiryDate = expiryDate
+    }
+    if (price !== undefined) {
+      updateData.price = Number(price)
     }
 
     const product = await Product.findByIdAndUpdate(
