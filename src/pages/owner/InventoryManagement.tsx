@@ -17,7 +17,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Package, AlertTriangle } from 'lucide-react'
+import { Search, Package, AlertTriangle, QrCode } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import {
   Dialog,
   DialogContent,
@@ -168,6 +169,7 @@ const InventoryManagement = () => {
   )
   const [approveTarget, setApproveTarget] = useState<OrderRequest | null>(null)
   const [orderQuantity, setOrderQuantity] = useState('')
+  const [qrTarget, setQrTarget] = useState<Product | null>(null)
 
   // [안전장치 3] 날짜 계산 로직 강화 (함수 선언으로 호이스팅)
   function daysUntil(date?: string) {
@@ -607,6 +609,14 @@ const InventoryManagement = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-6">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setQrTarget(item)}
+                          title="QR 코드 보기"
+                        >
+                          <QrCode className="w-4 h-4" />
+                        </Button>
                         <div className="text-right">
                           <p className="text-sm text-muted-foreground">재고</p>
                           <p
@@ -825,6 +835,33 @@ const InventoryManagement = () => {
               취소
             </Button>
             <Button onClick={handleApproveConfirm}>전송</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!qrTarget} onOpenChange={(open) => !open && setQrTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>QR 코드 - {qrTarget?.productName}</DialogTitle>
+            <DialogDescription>
+              이 QR 코드를 스캔하여 재고를 입고할 수 있습니다.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center justify-center p-6">
+            {qrTarget && (
+              <div className="bg-white p-4 rounded-lg">
+                <QRCodeSVG
+                  value={JSON.stringify({
+                    productId: qrTarget._id,
+                    productName: qrTarget.productName,
+                  })}
+                  size={200}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setQrTarget(null)}>닫기</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
