@@ -672,9 +672,9 @@ const InventoryManagement = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {pendingOrders.map((request) => (
+                {pendingOrders.map((request, index) => (
                   <div
-                    key={request.id}
+                    key={request.id || index}
                     className="flex items-center justify-between p-4 border rounded-lg"
                   >
                     <div>
@@ -715,9 +715,9 @@ const InventoryManagement = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {approvedOrders.map((request) => (
+                {approvedOrders.map((request, index) => (
                   <div
-                    key={request.id}
+                    key={request.id || index}
                     className="flex items-center justify-between p-4 border rounded-lg"
                   >
                     <div>
@@ -758,9 +758,9 @@ const InventoryManagement = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {expiringItems.map((item) => (
+                {expiringItems.map((item, index) => (
                   <div
-                    key={item._id}
+                    key={item._id || index}
                     className="flex items-center justify-between p-4 border border-destructive/20 bg-destructive/5 rounded-lg"
                   >
                     <div className="flex items-center gap-4">
