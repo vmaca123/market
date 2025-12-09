@@ -117,6 +117,12 @@ router.get('/summary', authMiddleware, async (req, res) => {
     // 위 루프에서 lowStockItems 배열에 이미 정확하게 모아두었으므로 그 길이를 사용
     const pendingOrdersCount = lowStockItems.length
 
+    console.log(
+      `[Dashboard] Calculated pendingOrders: ${pendingOrdersCount}, Low items: ${lowStockItems
+        .map((i) => i.name)
+        .join(', ')}`
+    )
+
     const inventoryData = [
       { name: '정상', value: normal, color: 'hsl(var(--success))' },
       { name: '부족', value: low, color: 'hsl(var(--warning))' }, // 발주 대기 대상
