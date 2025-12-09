@@ -444,14 +444,25 @@ const InventoryManagement = () => {
     }
 
     try {
-      await api.patch(`/products/${approveTarget.id}/stock`, {
-        quantity: qty,
-      })
+      // [수정] 발주 승인 시 재고를 즉시 늘리지 않음 (QR 스캔 시 입고 처리)
+      // await api.patch(`/products/${approveTarget.id}/stock`, {
+      //   quantity: qty,
+      // })
 
-      // [수정] 서버에서 최신 데이터를 다시 불러와서 확실하게 동기화
-      await fetchInventory()
+      // [수정] 서버에서 최신 데이터를 다시 불러와서 확실하게 동기화 (재고는 그대로여야 함)
+      // await fetchInventory()
       
       applyApprovalState()
+      
+      // 추가 안내 메시지
+      setTimeout(() => {
+        toast({
+          title: '입고 대기 상태',
+          description: '물품 도착 후 QR 코드를 스캔하면 재고가 추가됩니다.',
+          duration: 5000,
+        })
+      }, 500)
+
     } catch (err: any) {
       console.error('발주 승인 처리 실패:', err)
       toast({
