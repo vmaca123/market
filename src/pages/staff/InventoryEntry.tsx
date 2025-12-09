@@ -253,9 +253,21 @@ const InventoryManagement = () => {
       return
     }
 
+    if (!qrData.expireDate) {
+      toast({
+        title: '입력 오류',
+        description: '유통기한을 입력해주세요.',
+        variant: 'destructive',
+      })
+      return
+    }
+
     try {
       await api.post('/save-qr', {
-        data: JSON.stringify(qrData),
+        data: JSON.stringify({
+          ...qrData,
+          entryDate: new Date().toISOString(),
+        }),
       })
 
       toast({

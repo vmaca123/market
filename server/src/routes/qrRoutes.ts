@@ -35,8 +35,8 @@ router.post('/save-qr', async (req, res) => {
       productName,
       barcode: targetBarcode,
       price: priceNum,
-      entryDate,
-      expireDate,
+      entryDate: entryDate || new Date().toISOString(),
+      expireDate: expireDate || '',
       quantity: qtyNum,
     })
 
