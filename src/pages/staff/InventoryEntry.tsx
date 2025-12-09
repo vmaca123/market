@@ -54,6 +54,40 @@ const isExpired = (date?: string) => {
   return target < todayStart
 }
 
+// [자동 계산] 상품 종류별 유통기한 자동 계산 로직
+const getAutoExpiryDate = (productName: string, category: string) => {
+  const today = new Date()
+  let addDays = 180 // 기본값 (라면/일반식품 등)
+
+  const name = productName.toLowerCase()
+  const cat = category || '기타'
+
+  if (cat === '식품') {
+    if (
+      name.includes('삼각') ||
+      name.includes('김밥') ||
+      name.includes('도시락') ||
+      name.includes('샌드위치') ||
+      name.includes('버거')
+    ) {
+      addDays = 3 // 신선식품
+    } else if (name.includes('우유') || name.includes('유제품')) {
+      addDays = 10 // 유제품
+    } else if (name.includes('빵') || name.includes('케이크')) {
+      addDays = 7 // 베이커리
+    } else if (name.includes('라면') || name.includes('면')) {
+      addDays = 180 // 라면류
+    }
+  } else if (cat === '음료') {
+    addDays = 180 // 음료
+  } else if (cat === '생활용품') {
+    addDays = 365 * 2 // 생활용품 (2년)
+  }
+
+  const targetDate = new Date(today.setDate(today.getDate() + addDays))
+  return targetDate.toISOString().split('T')[0]
+}
+
 // 데모용 모의 데이터
 const MOCK_PRODUCTS: Product[] = [
   {
@@ -169,15 +203,32 @@ const InventoryManagement = () => {
     try {
       const parsed = JSON.parse(decodedText)
       if (parsed.productId || parsed.productName) {
+        // 유통기한 자동 계산 로직 추가
+        let finalExpireDate = parsed.expireDate
+        if (!finalExpireDate) {
+          // 기존 재고에서 카테고리 찾기
+          const existingItem = items.find(
+            (i) =>
+              i._id === parsed.productId || i.productName === parsed.productName
+          )
+          const category = existingItem?.category || '기타'
+          finalExpireDate = getAutoExpiryDate(
+            parsed.productName || '',
+            category
+          )
+        }
+
         setQrData((prev) => ({
           ...prev,
           barcode: parsed.productId || prev.barcode,
           productName: parsed.productName || prev.productName,
+          quantity: parsed.quantity || prev.quantity,
+          expireDate: finalExpireDate,
         }))
         setScanning(false)
         toast({
           title: '스캔 성공',
-          description: 'QR 코드가 인식되었습니다.',
+          description: 'QR 코드가 인식되었습니다. (유통기한 자동 입력)',
         })
       } else {
         throw new Error('Invalid format')
