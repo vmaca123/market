@@ -66,8 +66,10 @@ router.post('/save-qr', async (req, res) => {
           `✅ [재고반영] ${productName}: +${qtyNum}개 (현재: ${product.stock}개)`
         )
       } else {
-        // 바코드로 못 찾았을 경우, 이름으로 검색 시도
-        const existingByName = await Product.findOne({ name: productName })
+        // 바코드로 못 찾았을 경우, 이름으로 검색 시도 (가격이 설정된 상품 우선 검색)
+        const existingByName = await Product.findOne({ name: productName }).sort({
+          price: -1,
+        })
 
         if (existingByName) {
           // 이름이 같은 상품이 존재함.
