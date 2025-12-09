@@ -655,6 +655,8 @@ const InventoryManagement = () => {
       if ((axios as any).isAxiosError(e)) {
         if (e.response?.status === 404) {
           errorMsg = '이미 삭제되었거나 존재하지 않는 상품입니다.'
+          // 이미 삭제된 경우 목록에서도 제거
+          setItems((prev) => prev.filter((item) => item._id !== id))
         } else if (e.response?.status === 400) {
           errorMsg = '잘못된 요청입니다. (ID 오류)'
         } else if (e.response?.data?.message) {
