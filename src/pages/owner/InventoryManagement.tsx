@@ -815,7 +815,15 @@ const InventoryManagement = () => {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => setQrTarget({ _id: request.id, productName: request.item } as Product)}
+                        onClick={() =>
+                          setQrTarget({
+                            _id: request.id,
+                            productName: request.item,
+                            // @ts-ignore
+                            orderQuantity: request.orderQuantity,
+                            expireDate: request.expireDate,
+                          } as Product)
+                        }
                         title="발주 QR 보기 (이메일 첨부)"
                       >
                         <Mail className="w-4 h-4" />
