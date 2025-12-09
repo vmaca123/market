@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Package, AlertTriangle, QrCode, Scan, Mail } from 'lucide-react'
+import { Search, Package, AlertTriangle, QrCode, Scan, Mail, Trash2 } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import QrScanner from '@/components/QrScanner'
 import { Label } from '@/components/ui/label'
@@ -628,6 +628,26 @@ const InventoryManagement = () => {
     }
   }
 
+  const handleDeleteProduct = async (id: string) => {
+    if (!confirm('정말 이 상품을 삭제하시겠습니까?')) return
+
+    try {
+      await api.delete(`/products/${id}`)
+      toast({
+        title: '삭제 완료',
+        description: '상품이 삭제되었습니다.',
+      })
+      fetchInventory()
+    } catch (e) {
+      console.error(e)
+      toast({
+        title: '삭제 실패',
+        description: '상품 삭제 중 오류가 발생했습니다.',
+        variant: 'destructive',
+      })
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* ======= 2.b) 재고/발주 관리 - DB목록, 검색/필터링, 발주요청 알림, 자동추천 및 신청, 유통기한임박 상품 ======= */}
@@ -769,6 +789,15 @@ const InventoryManagement = () => {
                           title="QR 코드 보기"
                         >
                           <QrCode className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDeleteProduct(item._id)}
+                          title="상품 삭제"
+                        >
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                         <div className="text-right">
                           <p className="text-sm text-muted-foreground">재고</p>

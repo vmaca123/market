@@ -88,4 +88,18 @@ router.patch('/:id', authMiddleware, async (req, res) => {
   }
 })
 
+// 상품 삭제
+router.delete('/:id', authMiddleware, async (req, res) => {
+  try {
+    const product = await Product.findByIdAndDelete(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: '상품을 찾을 수 없습니다.' })
+    }
+    res.json({ message: '상품이 삭제되었습니다.' })
+  } catch (err) {
+    console.error('상품 삭제 에러:', err)
+    res.status(500).json({ message: '상품 삭제 실패' })
+  }
+})
+
 export default router
