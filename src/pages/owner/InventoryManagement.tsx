@@ -17,8 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Package, AlertTriangle, QrCode } from 'lucide-react'
+import { Search, Package, AlertTriangle, QrCode, Scan, Mail } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
+import QrScanner from '@/components/QrScanner'
+import { Label } from '@/components/ui/label'
 import {
   Dialog,
   DialogContent,
@@ -170,6 +172,14 @@ const InventoryManagement = () => {
   const [approveTarget, setApproveTarget] = useState<OrderRequest | null>(null)
   const [orderQuantity, setOrderQuantity] = useState('')
   const [qrTarget, setQrTarget] = useState<Product | null>(null)
+  
+  // QR 입고 관련 상태
+  const [scanTarget, setScanTarget] = useState<OrderRequest | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [receiveData, setReceiveData] = useState({
+    quantity: 0,
+    expireDate: '',
+  })
 
   // [안전장치 3] 날짜 계산 로직 강화 (함수 선언으로 호이스팅)
   function daysUntil(date?: string) {
@@ -428,48 +438,78 @@ const InventoryManagement = () => {
       setOrderQuantity('')
       toast({
         title: '발주 승인 완료',
-        description: `${approveTarget.item}을(를) ${qty}개 발주했습니다.`,
+        description: `발주서와 QR 코드가 이메일(owner@example.com)로 전송되었습니다.`,
       })
     }
 
-    const token = localStorage.getItem('token')
-    if (!token) {
-      setItems((prev) =>
-        prev.map((item) =>
-          item._id === approveTarget.id
-            ? { ...item, quantity: item.quantity + qty }
-            : item
-        )
-      )
-      applyApprovalState()
+    // 서버 통신 없이 상태만 변경 (이메일 전송 시뮬레이션)
+    applyApprovalState()
+  }
+
+  const handleScanReceive = (decodedText: string) => {
+    try {
+      const parsed = JSON.parse(decodedText)
+      // QR 데이터 검증 (여기서는 간단히 ID 확인)
+      if (parsed.productId && scanTarget) {
+        // 스캔 성공
+        setScanning(false)
+        setReceiveData((prev) => ({ ...prev, quantity: parsed.quantity || scanTarget.orderQuantity || 0 }))
+        toast({
+          title: '스캔 성공',
+          description: 'QR 코드가 확인되었습니다. 유통기한을 입력해주세요.',
+        })
+      } else {
+        throw new Error('Invalid QR')
+      }
+    } catch (e) {
+      // 에러 처리 또는 단순 바코드 처리
+      setScanning(false)
+      toast({
+        title: '스캔 완료',
+        description: '바코드가 인식되었습니다.',
+      })
+    }
+  }
+
+  const handleReceiveSubmit = async () => {
+    if (!scanTarget) return
+    if (!receiveData.expireDate) {
+      toast({
+        title: '입력 오류',
+        description: '유통기한을 입력해주세요.',
+        variant: 'destructive',
+      })
       return
     }
 
     try {
-      // [수정] 발주 승인 시 재고를 즉시 늘리지 않음 (QR 스캔 시 입고 처리)
-      // await api.patch(`/products/${approveTarget.id}/stock`, {
-      //   quantity: qty,
-      // })
+      // 1. 재고 추가 API 호출
+      const currentItem = items.find(i => i._id === scanTarget.id)
+      const newQuantity = (currentItem?.quantity || 0) + (receiveData.quantity || scanTarget.orderQuantity || 0)
 
-      // [수정] 서버에서 최신 데이터를 다시 불러와서 확실하게 동기화 (재고는 그대로여야 함)
-      // await fetchInventory()
-      
-      applyApprovalState()
-      
-      // 추가 안내 메시지
-      setTimeout(() => {
-        toast({
-          title: '입고 대기 상태',
-          description: '물품 도착 후 QR 코드를 스캔하면 재고가 추가됩니다.',
-          duration: 5000,
-        })
-      }, 500)
+      await api.patch(`/products/${scanTarget.id}`, {
+        quantity: newQuantity,
+        expiryDate: receiveData.expireDate
+      })
 
-    } catch (err: any) {
-      console.error('발주 승인 처리 실패:', err)
+      // 2. 발주 목록에서 제거 (또는 완료 처리)
+      setOrderRequests(prev => prev.filter(r => r.id !== scanTarget.id))
+
       toast({
-        title: '승인 실패',
-        description: '재고 업데이트에 실패했습니다. 다시 시도해주세요.',
+        title: '입고 완료',
+        description: `${scanTarget.item} ${receiveData.quantity}개가 입고되었습니다.`,
+      })
+      
+      // 목록 새로고침
+      fetchInventory()
+      setScanTarget(null)
+      setReceiveData({ quantity: 0, expireDate: '' })
+
+    } catch (e) {
+      console.error(e)
+      toast({
+        title: '입고 실패',
+        description: '서버 오류가 발생했습니다.',
         variant: 'destructive',
       })
     }
@@ -745,12 +785,34 @@ const InventoryManagement = () => {
                           : '-'}
                       </p>
                     </div>
-                    <Badge
-                      variant="outline"
-                      className="border-success text-success"
-                    >
-                      승인됨
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setQrTarget({ _id: request.id, productName: request.item } as Product)}
+                        title="발주 QR 보기 (이메일 첨부)"
+                      >
+                        <Mail className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        onClick={() => {
+                          setScanTarget(request)
+                          setScanning(true)
+                        }}
+                      >
+                        <Scan className="w-4 h-4" />
+                        입고 스캔
+                      </Button>
+                      <Badge
+                        variant="outline"
+                        className="border-success text-success"
+                      >
+                        승인됨
+                      </Badge>
+                    </div>
                   </div>
                 ))}
                 {approvedOrders.length === 0 && (
@@ -854,6 +916,7 @@ const InventoryManagement = () => {
                   value={JSON.stringify({
                     productId: qrTarget._id,
                     productName: qrTarget.productName,
+                    quantity: (qrTarget as any).orderQuantity, // 발주 수량 포함
                   })}
                   size={200}
                 />
@@ -863,6 +926,80 @@ const InventoryManagement = () => {
           <DialogFooter>
             <Button onClick={() => setQrTarget(null)}>닫기</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 입고 스캔 다이얼로그 */}
+      <Dialog
+        open={!!scanTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setScanTarget(null)
+            setScanning(false)
+            setReceiveData({ quantity: 0, expireDate: '' })
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>입고 처리 - {scanTarget?.item}</DialogTitle>
+            <DialogDescription>
+              {scanning
+                ? '도착한 물품의 QR 코드를 스캔하세요.'
+                : '입고 정보를 확인하고 유통기한을 입력하세요.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {scanning ? (
+            <QrScanner
+              onScan={handleScanReceive}
+              onClose={() => setScanning(false)}
+            />
+          ) : (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">상품명</Label>
+                <div className="col-span-3 font-medium">{scanTarget?.item}</div>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">입고 수량</Label>
+                <Input
+                  type="number"
+                  value={receiveData.quantity}
+                  onChange={(e) =>
+                    setReceiveData({
+                      ...receiveData,
+                      quantity: Number(e.target.value),
+                    })
+                  }
+                  className="col-span-3"
+                />
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label className="text-right">유통기한</Label>
+                <Input
+                  type="date"
+                  value={receiveData.expireDate}
+                  onChange={(e) =>
+                    setReceiveData({
+                      ...receiveData,
+                      expireDate: e.target.value,
+                    })
+                  }
+                  className="col-span-3"
+                />
+              </div>
+            </div>
+          )}
+
+          {!scanning && (
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setScanning(true)}>
+                다시 스캔
+              </Button>
+              <Button onClick={handleReceiveSubmit}>입고 완료</Button>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </div>

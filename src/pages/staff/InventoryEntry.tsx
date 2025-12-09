@@ -28,8 +28,8 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Search, Package, AlertTriangle, QrCode, Plus } from 'lucide-react'
-import { Html5QrcodeScanner } from 'html5-qrcode'
 import { useToast } from '@/hooks/use-toast'
+import QrScanner from '@/components/QrScanner'
 import api from '@/lib/api'
 import axios from 'axios'
 
@@ -77,45 +77,6 @@ const MOCK_PRODUCTS: Product[] = [
     price: 1200,
   },
 ]
-
-const QrScanner = ({
-  onScan,
-  onClose,
-}: {
-  onScan: (text: string) => void
-  onClose: () => void
-}) => {
-  useEffect(() => {
-    const scanner = new Html5QrcodeScanner(
-      'reader',
-      { fps: 10, qrbox: { width: 250, height: 250 } },
-      false
-    )
-
-    scanner.render(
-      (decodedText) => {
-        onScan(decodedText)
-        scanner.clear()
-      },
-      (error) => {
-        // ignore errors
-      }
-    )
-
-    return () => {
-      scanner.clear().catch(console.error)
-    }
-  }, [onScan])
-
-  return (
-    <div className="space-y-4">
-      <div id="reader" className="w-full"></div>
-      <Button variant="outline" className="w-full" onClick={onClose}>
-        스캔 취소 (수동 입력)
-      </Button>
-    </div>
-  )
-}
 
 const InventoryManagement = () => {
   const { toast } = useToast()
