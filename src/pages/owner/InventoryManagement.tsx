@@ -61,6 +61,7 @@ type OrderRequest = {
    */
   /*******  34d91ae8-c998-4c15-b3f0-01d65f2cf339  *******/ orderQuantity?: number
   orderedAt?: string
+  expireDate?: string // QR 생성용 자동 계산된 유통기한
 }
 
 const isExpired = (date?: string) => {
@@ -421,6 +422,21 @@ const InventoryManagement = () => {
       return
     }
 
+    // [자동 계산] 카테고리별 유통기한 자동 설정
+    const targetProduct = items.find((i) => i._id === approveTarget.id)
+    const category = targetProduct?.category || '기타'
+    
+    const today = new Date()
+    let addDays = 30 // 기본 30일
+    
+    if (category === '식품') addDays = 7
+    else if (category === '음료') addDays = 180
+    else if (category === '생활용품') addDays = 365
+    
+    const autoExpiryDate = new Date(today.setDate(today.getDate() + addDays))
+      .toISOString()
+      .split('T')[0]
+
     const applyApprovalState = () => {
       setOrderRequests((prev) =>
         prev.map((req) =>
@@ -430,6 +446,7 @@ const InventoryManagement = () => {
                 status: '승인',
                 orderQuantity: qty,
                 orderedAt: new Date().toISOString(),
+                expireDate: autoExpiryDate, // 자동 계산된 유통기한 저장
               }
             : req
         )
@@ -438,7 +455,7 @@ const InventoryManagement = () => {
       setOrderQuantity('')
       toast({
         title: '발주 승인 완료',
-        description: `발주서와 QR 코드가 이메일(owner@example.com)로 전송되었습니다.`,
+        description: `발주서와 QR 코드가 이메일로 전송되었습니다. (유통기한 자동 설정: ${autoExpiryDate})`,
       })
     }
 
@@ -453,10 +470,19 @@ const InventoryManagement = () => {
       if (parsed.productId && scanTarget) {
         // 스캔 성공
         setScanning(false)
-        setReceiveData((prev) => ({ ...prev, quantity: parsed.quantity || scanTarget.orderQuantity || 0 }))
+        setReceiveData((prev) => ({ 
+          ...prev, 
+          quantity: parsed.quantity || scanTarget.orderQuantity || 0,
+          expireDate: parsed.expireDate || '', // QR에서 유통기한 자동 입력
+        }))
+        
+        const msg = parsed.expireDate 
+          ? 'QR 코드 확인 완료. (유통기한 자동 입력됨)'
+          : 'QR 코드 확인 완료. 유통기한을 입력해주세요.'
+
         toast({
           title: '스캔 성공',
-          description: 'QR 코드가 확인되었습니다. 유통기한을 입력해주세요.',
+          description: msg,
         })
       } else {
         throw new Error('Invalid QR')
@@ -879,24 +905,30 @@ const InventoryManagement = () => {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>발주 수량 입력</DialogTitle>
+            <DialogTitle>발주 승인</DialogTitle>
             <DialogDescription>
-              {approveTarget?.item}에 대해 주문할 수량을 입력하세요.
+              {approveTarget?.item}의 발주 수량을 입력하세요.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Input
-              type="number"
-              min={1}
-              value={orderQuantity}
-              onChange={(e) => setOrderQuantity(e.target.value)}
-            />
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>주문 수량</Label>
+              <Input
+                type="number"
+                min={1}
+                value={orderQuantity}
+                onChange={(e) => setOrderQuantity(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                * 유통기한은 상품 카테고리에 따라 자동 설정되어 QR에 포함됩니다.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setApproveTarget(null)}>
               취소
             </Button>
-            <Button onClick={handleApproveConfirm}>전송</Button>
+            <Button onClick={handleApproveConfirm}>승인 및 QR 생성</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -916,7 +948,8 @@ const InventoryManagement = () => {
                   value={JSON.stringify({
                     productId: qrTarget._id,
                     productName: qrTarget.productName,
-                    quantity: (qrTarget as any).orderQuantity, // 발주 수량 포함
+                    quantity: (qrTarget as any).orderQuantity,
+                    expireDate: (qrTarget as any).expireDate, // 유통기한 포함
                   })}
                   size={200}
                 />
