@@ -502,33 +502,63 @@ const InventoryManagement = () => {
     }
 
     try {
-      // 1. 재고 추가 API 호출
-      const currentItem = items.find(i => i._id === scanTarget.id)
-      const newQuantity = (currentItem?.quantity || 0) + (receiveData.quantity || scanTarget.orderQuantity || 0)
+      const currentItem = items.find((i) => i._id === scanTarget.id)
+      const newQuantity =
+        (currentItem?.quantity || 0) +
+        (receiveData.quantity || scanTarget.orderQuantity || 0)
 
-      await api.patch(`/products/${scanTarget.id}`, {
-        quantity: newQuantity,
-        expiryDate: receiveData.expireDate
-      })
+      // [Mock Data 처리] ID가 mock_으로 시작하면 서버 요청 없이 로컬 상태만 업데이트
+      if (scanTarget.id.startsWith('mock_')) {
+        console.log('Mock data update simulation')
+        setItems((prev) =>
+          prev.map((item) =>
+            item._id === scanTarget.id
+              ? {
+                  ...item,
+                  quantity: newQuantity,
+                  expireDate: receiveData.expireDate,
+                }
+              : item
+          )
+        )
+      } else {
+        // 1. 재고 추가 API 호출
+        await api.patch(`/products/${scanTarget.id}`, {
+          quantity: newQuantity,
+          expiryDate: receiveData.expireDate,
+        })
+      }
 
       // 2. 발주 목록에서 제거 (또는 완료 처리)
-      setOrderRequests(prev => prev.filter(r => r.id !== scanTarget.id))
+      setOrderRequests((prev) => prev.filter((r) => r.id !== scanTarget.id))
 
       toast({
         title: '입고 완료',
         description: `${scanTarget.item} ${receiveData.quantity}개가 입고되었습니다.`,
       })
+
+      // 목록 새로고침 (Mock 데이터가 아닐 경우에만)
+      if (!scanTarget.id.startsWith('mock_')) {
+        fetchInventory()
+      }
       
-      // 목록 새로고침
-      fetchInventory()
       setScanTarget(null)
       setReceiveData({ quantity: 0, expireDate: '' })
-
-    } catch (e) {
+    } catch (e: any) {
       console.error(e)
+      let errorMsg = '서버 오류가 발생했습니다.'
+      
+      if (axios.isAxiosError(e)) {
+        if (e.response?.status === 404) {
+          errorMsg = 'API 경로를 찾을 수 없습니다. 서버를 재시작해주세요.'
+        } else if (e.response?.data?.message) {
+          errorMsg = e.response.data.message
+        }
+      }
+
       toast({
         title: '입고 실패',
-        description: '서버 오류가 발생했습니다.',
+        description: errorMsg,
         variant: 'destructive',
       })
     }
