@@ -205,6 +205,8 @@ const InventoryManagement = () => {
         return
       }
 
+      console.log('Fetched inventory:', res.data)
+
       const mapped = res.data.map((item: any) => {
         const expired = isExpired(item.expiryDate)
         return {
@@ -579,11 +581,11 @@ const InventoryManagement = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {filteredInventory.map((item) => {
+                {filteredInventory.map((item, index) => {
                   const expiry = daysUntil(item.expireDate)
                   return (
                     <div
-                      key={item._id}
+                      key={item._id || index}
                       className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex items-center gap-4 flex-1">
