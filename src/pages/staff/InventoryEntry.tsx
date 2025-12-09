@@ -17,9 +17,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Package, AlertTriangle } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Search, Package, AlertTriangle, QrCode, Plus } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import api from '@/lib/api'
+import axios from 'axios'
 
 type Product = {
   _id: string
@@ -72,6 +83,16 @@ const InventoryManagement = () => {
   const [selectedCategory, setSelectedCategory] = useState('전체')
   const [items, setItems] = useState<Product[]>([])
   const [loading, setLoading] = useState(false)
+
+  // QR 입력 상태
+  const [qrOpen, setQrOpen] = useState(false)
+  const [qrData, setQrData] = useState({
+    barcode: '',
+    productName: '',
+    quantity: 1,
+    price: 0,
+    expireDate: '',
+  })
 
   const fetchInventory = async () => {
     setLoading(true)
@@ -142,6 +163,44 @@ const InventoryManagement = () => {
     fetchInventory()
   }, [])
 
+  const handleQrSubmit = async () => {
+    if (!qrData.productName || !qrData.quantity) {
+      toast({
+        title: '입력 오류',
+        description: '상품명과 수량은 필수입니다.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    try {
+      await api.post('/save-qr', {
+        data: JSON.stringify(qrData),
+      })
+
+      toast({
+        title: '입고 완료',
+        description: `${qrData.productName} ${qrData.quantity}개가 입고되었습니다.`,
+      })
+      setQrOpen(false)
+      setQrData({
+        barcode: '',
+        productName: '',
+        quantity: 1,
+        price: 0,
+        expireDate: '',
+      })
+      fetchInventory() // 목록 갱신
+    } catch (err) {
+      console.error(err)
+      toast({
+        title: '입고 실패',
+        description: '서버 오류가 발생했습니다.',
+        variant: 'destructive',
+      })
+    }
+  }
+
   // 검색 및 카테고리 필터링
   const filteredInventory = useMemo(() => {
     return items.filter((item) => {
@@ -174,8 +233,105 @@ const InventoryManagement = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">재고 관리</h1>
-        <p className="text-muted-foreground mt-1">재고 현황을 확인하세요</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">재고 관리</h1>
+            <p className="text-muted-foreground mt-1">재고 현황을 확인하세요</p>
+          </div>
+          <Dialog open={qrOpen} onOpenChange={setQrOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <QrCode className="w-4 h-4" /> QR 입고 스캔
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>QR 입고 (시뮬레이션)</DialogTitle>
+                <DialogDescription>
+                  QR 코드 스캔 데이터를 직접 입력하여 입고 처리합니다.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="barcode" className="text-right">
+                    바코드
+                  </Label>
+                  <Input
+                    id="barcode"
+                    value={qrData.barcode}
+                    onChange={(e) =>
+                      setQrData({ ...qrData, barcode: e.target.value })
+                    }
+                    className="col-span-3"
+                    placeholder="스캔된 바코드 번호"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="name" className="text-right">
+                    상품명
+                  </Label>
+                  <Input
+                    id="name"
+                    value={qrData.productName}
+                    onChange={(e) =>
+                      setQrData({ ...qrData, productName: e.target.value })
+                    }
+                    className="col-span-3"
+                    placeholder="예: 신라면"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="qty" className="text-right">
+                    수량
+                  </Label>
+                  <Input
+                    id="qty"
+                    type="number"
+                    value={qrData.quantity}
+                    onChange={(e) =>
+                      setQrData({ ...qrData, quantity: Number(e.target.value) })
+                    }
+                    className="col-span-3"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="price" className="text-right">
+                    가격
+                  </Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    value={qrData.price}
+                    onChange={(e) =>
+                      setQrData({ ...qrData, price: Number(e.target.value) })
+                    }
+                    className="col-span-3"
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="expiry" className="text-right">
+                    유통기한
+                  </Label>
+                  <Input
+                    id="expiry"
+                    type="date"
+                    value={qrData.expireDate}
+                    onChange={(e) =>
+                      setQrData({ ...qrData, expireDate: e.target.value })
+                    }
+                    className="col-span-3"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setQrOpen(false)}>
+                  취소
+                </Button>
+                <Button onClick={handleQrSubmit}>입고 처리</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       <Tabs defaultValue="inventory" className="space-y-4">
