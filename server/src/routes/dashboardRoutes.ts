@@ -113,6 +113,10 @@ router.get('/summary', authMiddleware, async (req, res) => {
       }
     })
 
+    // [수정] 대시보드 상단 카드에는 '순수하게 재고가 부족한 상품 수'를 표시해야 함
+    // 위 루프에서 lowStockItems 배열에 이미 정확하게 모아두었으므로 그 길이를 사용
+    const pendingOrdersCount = lowStockItems.length
+
     const inventoryData = [
       { name: '정상', value: normal, color: 'hsl(var(--success))' },
       { name: '부족', value: low, color: 'hsl(var(--warning))' }, // 발주 대기 대상
@@ -167,7 +171,7 @@ router.get('/summary', authMiddleware, async (req, res) => {
       stats: {
         todaySales: todaySalesTotal,
         totalInventory: totalInventoryCount,
-        pendingOrders: low, // 재고 부족 품목 수 = 발주 대기
+        pendingOrders: pendingOrdersCount, // [수정] 정확한 재고 부족 수량 사용
         staffCount: staffCount,
       },
       salesData,
