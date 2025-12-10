@@ -701,7 +701,14 @@ const InventoryManagement = () => {
         await api.patch(`/products/${editPriceTarget._id}`, {
           price: newPrice,
         })
-        fetchInventory()
+        // 화면 즉시 갱신 (새로고침 없이)
+        setItems((prev) =>
+          prev.map((item) =>
+            item._id === editPriceTarget._id
+              ? { ...item, price: newPrice }
+              : item
+          )
+        )
       }
 
       toast({
