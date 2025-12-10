@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Search, Package, AlertTriangle, QrCode, Scan, Mail, Trash2 } from 'lucide-react'
+import { Search, Package, AlertTriangle, QrCode, Scan, Mail, Trash2, Pencil } from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import QrScanner from '@/components/QrScanner'
 import { Label } from '@/components/ui/label'
@@ -849,16 +849,25 @@ const InventoryManagement = () => {
                           <div className="flex items-center gap-2 text-sm text-muted-foreground">
                             <span>{item.category}</span>
                             <span>•</span>
-                            <button
-                              onClick={() => {
-                                setEditPriceTarget(item)
-                                setEditPriceValue(item.price?.toString() || '0')
-                              }}
-                              className="hover:underline hover:text-primary flex items-center gap-1"
-                              title="가격 수정"
-                            >
-                              ₩{item.price?.toLocaleString?.() ?? '-'}
-                            </button>
+                            <div className="flex items-center gap-1">
+                              <span className="font-medium">
+                                ₩{item.price?.toLocaleString?.() ?? '-'}
+                              </span>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-6 w-6 text-muted-foreground hover:text-primary"
+                                onClick={() => {
+                                  setEditPriceTarget(item)
+                                  setEditPriceValue(
+                                    item.price?.toString() || '0'
+                                  )
+                                }}
+                                title="가격 수정"
+                              >
+                                <Pencil className="w-3 h-3" />
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
